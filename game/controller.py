@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
 
+from app_config import AppConfig
 from app_logger import AppLogger
 from responses import APIConfig, APIError, ResponseClient
 from game.records import ChatRecord
@@ -45,7 +46,7 @@ class GameStateController(QObject):
         self._awaiting_init_export = False
         self._awaiting_opening_options = False
         self._init_export_done = False
-        self._settings = QSettings("erikH", "interactive-chat")
+        self._config = AppConfig.instance()
         self._base_path = base_path
         self._greetings_lines = self._read_prompt_lines("core/greetings.md", "Describe a world you want to live in.")
         self._core_prompt = self._read_prompt_file("core/system.md", "")
@@ -141,12 +142,12 @@ class GameStateController(QObject):
     # ------------------------------------------------------------------
 
     def _build_api_client(self) -> ResponseClient | None:
-        api_key = str(self._settings.value("ai/api_key", "", type=str)).strip()
+        api_key = str(QSettings("erikH", "interactive-chat").value("ai/api_key", "", type=str)).strip()
         if not api_key:
             return None
-        base_url = str(self._settings.value("ai/base_url", "api.x.ai", type=str)).strip()
-        model = str(self._settings.value("ai/model", "grok-3-latest", type=str)).strip()
-        reasoning_model = str(self._settings.value("ai/reasoning_model", "grok-3-mini", type=str)).strip()
+        base_url = str(self._config.get("ai", "base_url", "api.x.ai")).strip()
+        model = str(self._config.get("ai", "model", "grok-3-latest")).strip()
+        reasoning_model = str(self._config.get("ai", "reasoning_model", "grok-3-mini")).strip()
         config = APIConfig(
             base_url=base_url,
             api_key=api_key,
@@ -239,9 +240,8 @@ class GameStateController(QObject):
             )
             return
 
-        user_count = sum(1 for r in self.records if r.role == "user")
         messages: list[dict[str, str]] = []
-        is_world_init_turn = user_count == 1 and (not self._is_world_initialized())
+        is_world_init_turn = not self._init_export_done and not self._is_world_initialized()
 
         if is_world_init_turn and self._init_prompt:
             messages.append({"role": "system", "content": self._init_prompt})
@@ -358,6 +358,7 @@ class GameStateController(QObject):
             old_player_data, player_data,
             old_item_data, item_data,
             map_data,
+            quest_data=self._read_quest_data(),
         )
         changes_text = "\n".join(changes_lines)
 
@@ -394,6 +395,11 @@ class GameStateController(QObject):
         item_data = read_world_json(self._world_folder_path, "item.json", [])
         map_data = read_world_json(self._world_folder_path, "map.json", [])
         return player_data, item_data, map_data
+
+    def _read_quest_data(self) -> list:
+        if self._world_folder_path is None:
+            return []
+        return read_world_json(self._world_folder_path, "quest.json", [])
 
     # ------------------------------------------------------------------
     # Records persistence
