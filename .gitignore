@@ -1,4 +1,12 @@
-/.claude
-/.venv
-/__pycache__
-/劍與魔法的艾爾大陸
+/* 
+# ignore all files in the root directory
+
+!/config
+!/core
+!/game
+!/ui
+!/.gitignore
+!/app_logger.py
+!/main.py
+!/requirements.txt
+!/responses.py
