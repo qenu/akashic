@@ -7,5 +7,14 @@
         ],
         "ThemeColor": "#ff009faa",
         "ThemeMode": "Dark"
+    },
+    "ui": {
+        "font_size": "14",
+        "window_opacity": 100
+    },
+    "ai": {
+        "base_url": "api.x.ai",
+        "model": "grok-3-latest",
+        "reasoning_model": "grok-3-mini"
     }
 }

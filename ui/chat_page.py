@@ -1,4 +1,4 @@
-from PySide6.QtCore import QEvent, QSettings, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -18,6 +18,8 @@ from qfluentwidgets import (
     TransparentToolButton,
 )
 
+from app_config import AppConfig
+
 
 class SectionsPage(QWidget):
     user_message_sent = Signal(str)
@@ -26,8 +28,7 @@ class SectionsPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("sectionsPage")
-        settings = QSettings("erikH", "interactive-chat")
-        self._font_size = int(settings.value("ui/font_size", 14, type=int))
+        self._font_size = int(AppConfig.instance().get("ui", "font_size", 14))
         self._max_chars = 150
         self._is_waiting = False
         self._options_available = True

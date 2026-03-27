@@ -6,6 +6,7 @@
 !/game
 !/ui
 !/.gitignore
+!/app_config.py
 !/app_logger.py
 !/main.py
 !/requirements.txt
