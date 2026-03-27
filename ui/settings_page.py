@@ -1,7 +1,8 @@
 from PySide6.QtCore import QSettings, Qt, Signal
-from PySide6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLineEdit, QScrollArea, QVBoxLayout, QWidget
 from qfluentwidgets import (
     ConfigItem,
+    ExpandGroupSettingCard,
     FluentIcon as FIF,
     InfoBar,
     InfoBarPosition,
@@ -21,6 +22,8 @@ from qfluentwidgets import (
     Theme,
     setTheme,
 )
+
+from app_config import AppConfig
 
 
 class TextSettingCard(SettingCard):
@@ -57,9 +60,12 @@ class SettingsPage(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("settingsPage")
-        self._settings = QSettings("erikH", "interactive-chat")
+        cfg = AppConfig.instance()
+        self._qsettings = QSettings("erikH", "interactive-chat")
 
-        saved_theme_mode = str(self._settings.value("ui/theme_mode", "Light", type=str))
+        # Theme is stored under QFluentWidgets.ThemeMode so qfluentwidgets
+        # also picks it up automatically on the next launch.
+        saved_theme_mode = str(cfg.get("QFluentWidgets", "ThemeMode", "Light"))
         if saved_theme_mode not in {"Light", "Dark", "Auto"}:
             saved_theme_mode = "Light"
 
@@ -67,17 +73,29 @@ class SettingsPage(QWidget):
             "App", "ThemeMode", saved_theme_mode,
             OptionsValidator(["Light", "Dark", "Auto"]),
         )
+
+        saved_opacity = int(cfg.get("ui", "window_opacity", 100))
         self.window_opacity_item = RangeConfigItem(
-            "App", "WindowOpacity", 100, RangeValidator(20, 100),
+            "App", "WindowOpacity", saved_opacity, RangeValidator(20, 100),
         )
+
         self.api_key_item = ConfigItem("App", "ApiKey", "")
         self.api_model_item = ConfigItem("App", "ApiModel", "grok-3-latest")
 
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._scroll = QScrollArea(self)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        _container = QWidget()
+        layout = QVBoxLayout(_container)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        group = SettingCardGroup("Settings", self)
+        group = SettingCardGroup("Settings", _container)
 
         self.theme_mode_card = OptionsSettingCard(
             self.theme_mode_item, FIF.PALETTE, "Theme",
@@ -88,24 +106,28 @@ class SettingsPage(QWidget):
             self.window_opacity_item, FIF.CONSTRACT, "Window Opacity",
             "Adjust overall window transparency", group,
         )
+        self.ai_group_card = ExpandGroupSettingCard(
+            FIF.ROBOT, "AI Settings", "API key, endpoint and model configuration", group,
+        )
         self.api_key_card = TextSettingCard(
             FIF.CERTIFICATE, "AI API Key", "Used for assistant API requests",
-            placeholder="Enter API key", password=True, parent=group,
+            placeholder="Enter API key", password=True,
         )
         self.api_base_url_card = TextSettingCard(
             FIF.LINK, "AI API Base URL", "Base endpoint for chat completion API",
-            placeholder="Enter base host or URL (e.g. api.x.ai)", parent=group,
+            placeholder="Enter base host or URL (e.g. api.x.ai)",
         )
         self.api_model_card = TextSettingCard(
             FIF.ROBOT, "AI API Model", "Model used for assistant API requests",
-            placeholder="Enter model name (e.g. grok-3-latest)", parent=group,
+            placeholder="Enter model name (e.g. grok-3-latest)",
         )
         self.api_reasoning_model_card = TextSettingCard(
             FIF.SEARCH, "World Creation Model", "Model used for the world builder (init) turn",
-            placeholder="Enter model name (e.g. grok-3-mini)", parent=group,
+            placeholder="Enter model name (e.g. grok-3-mini)",
         )
+
         font_size_options = ["14", "15", "16", "17", "18", "19", "20"]
-        saved_font_size = str(self._settings.value("ui/font_size", "14", type=str))
+        saved_font_size = str(cfg.get("ui", "font_size", "14"))
         if saved_font_size not in font_size_options:
             saved_font_size = "14"
         self.font_size_item = OptionsConfigItem(
@@ -123,34 +145,31 @@ class SettingsPage(QWidget):
             "Clear chat history and story progress", group,
         )
 
-        saved_api_key = str(self._settings.value("ai/api_key", "", type=str))
+        # Populate editors from config
+        saved_api_key = str(self._qsettings.value("ai/api_key", "", type=str))
         self.api_key_item.value = saved_api_key
         self.api_key_card.editor.setText(saved_api_key)
 
-        saved_api_model = str(self._settings.value("ai/model", "grok-3-latest", type=str)).strip()
-        if not saved_api_model:
-            saved_api_model = "grok-3-latest"
+        saved_api_model = str(cfg.get("ai", "model", "grok-3-latest")).strip() or "grok-3-latest"
         self.api_model_item.value = saved_api_model
         self.api_model_card.editor.setText(saved_api_model)
 
-        saved_reasoning_model = str(self._settings.value("ai/reasoning_model", "grok-3-mini", type=str)).strip()
-        if not saved_reasoning_model:
-            saved_reasoning_model = "grok-3-mini"
+        saved_reasoning_model = str(cfg.get("ai", "reasoning_model", "grok-3-mini")).strip() or "grok-3-mini"
         self.api_reasoning_model_card.editor.setText(saved_reasoning_model)
 
-        saved_base_url = str(self._settings.value("ai/base_url", "api.x.ai", type=str)).strip()
-        if not saved_base_url:
-            saved_base_url = "api.x.ai"
+        saved_base_url = str(cfg.get("ai", "base_url", "api.x.ai")).strip() or "api.x.ai"
         self.api_base_url_card.editor.setText(saved_base_url)
+
+        self.ai_group_card.addGroupWidget(self.api_key_card)
+        self.ai_group_card.addGroupWidget(self.api_base_url_card)
+        self.ai_group_card.addGroupWidget(self.api_model_card)
+        self.ai_group_card.addGroupWidget(self.api_reasoning_model_card)
 
         group.addSettingCards([
             self.theme_mode_card,
             self.opacity_card,
             self.font_size_card,
-            self.api_key_card,
-            self.api_base_url_card,
-            self.api_model_card,
-            self.api_reasoning_model_card,
+            self.ai_group_card,
             self.reset_story_card,
         ])
 
@@ -162,9 +181,10 @@ class SettingsPage(QWidget):
 
         def apply_theme_mode(option: str) -> None:
             setTheme(theme_map.get(option, Theme.LIGHT))
-            self._settings.setValue("ui/theme_mode", option)
+            AppConfig.instance().set("QFluentWidgets", "ThemeMode", option)
 
         def apply_window_opacity(value: int) -> None:
+            AppConfig.instance().set("ui", "window_opacity", value)
             window = self.window()
             if window is not None:
                 window.setWindowOpacity(value / 100.0)
@@ -172,7 +192,7 @@ class SettingsPage(QWidget):
         def save_api_key() -> None:
             value = self.api_key_card.editor.text()
             self.api_key_item.value = value
-            self._settings.setValue("ai/api_key", value)
+            self._qsettings.setValue("ai/api_key", value)
             InfoBar.success(
                 title="Saved", content="API key saved", duration=1500,
                 position=InfoBarPosition.TOP, parent=self.window(),
@@ -182,7 +202,7 @@ class SettingsPage(QWidget):
             value = self.api_model_card.editor.text().strip() or "grok-3-latest"
             self.api_model_item.value = value
             self.api_model_card.editor.setText(value)
-            self._settings.setValue("ai/model", value)
+            AppConfig.instance().set("ai", "model", value)
             InfoBar.success(
                 title="Saved", content="API model saved", duration=1500,
                 position=InfoBarPosition.TOP, parent=self.window(),
@@ -191,7 +211,7 @@ class SettingsPage(QWidget):
         def save_api_base_url() -> None:
             value = self.api_base_url_card.editor.text().strip() or "api.x.ai"
             self.api_base_url_card.editor.setText(value)
-            self._settings.setValue("ai/base_url", value)
+            AppConfig.instance().set("ai", "base_url", value)
             InfoBar.success(
                 title="Saved", content="API base URL saved", duration=1500,
                 position=InfoBarPosition.TOP, parent=self.window(),
@@ -200,7 +220,7 @@ class SettingsPage(QWidget):
         def save_reasoning_model() -> None:
             value = self.api_reasoning_model_card.editor.text().strip() or "grok-3-mini"
             self.api_reasoning_model_card.editor.setText(value)
-            self._settings.setValue("ai/reasoning_model", value)
+            AppConfig.instance().set("ai", "reasoning_model", value)
             InfoBar.success(
                 title="Saved", content="World creation model saved", duration=1500,
                 position=InfoBarPosition.TOP, parent=self.window(),
@@ -223,7 +243,7 @@ class SettingsPage(QWidget):
             )
 
         def apply_font_size(value: str) -> None:
-            self._settings.setValue("ui/font_size", value)
+            AppConfig.instance().set("ui", "font_size", value)
             self.font_size_changed.emit(int(value))
 
         self.theme_mode_item.valueChanged.connect(apply_theme_mode)
@@ -240,3 +260,5 @@ class SettingsPage(QWidget):
 
         layout.addWidget(group)
         layout.addStretch(1)
+        self._scroll.setWidget(_container)
+        outer_layout.addWidget(self._scroll)

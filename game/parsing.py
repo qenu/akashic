@@ -161,6 +161,7 @@ def format_changes_lines(
     old_items: Any = None,
     new_items: Any = None,
     map_data: Any = None,
+    quest_data: Any = None,
 ) -> list[str]:
     """Format a list of world change entries into human-readable display lines."""
     if not changes:
@@ -181,7 +182,7 @@ def format_changes_lines(
     for _, type_name, entry in buckets:
         action = str(entry.get("action", "")).strip().lower()
         lines.extend(_format_single_change(
-            type_name, action, entry, old_player, new_player, old_items, new_items, map_data
+            type_name, action, entry, old_player, new_player, old_items, new_items, map_data, quest_data
         ))
     return lines
 
@@ -202,6 +203,17 @@ def _find_item_in_list(items: Any, entry_id: str) -> "dict | None":
     return None
 
 
+def _find_quest_name(entry_id: str, quest_data: Any) -> str:
+    """Look up a quest's display name from quest.json by its id."""
+    if not isinstance(quest_data, list) or not entry_id:
+        return entry_id
+    for quest in quest_data:
+        if isinstance(quest, dict) and str(quest.get("id", "")).strip() == entry_id:
+            name = str(quest.get("名稱", "")).strip()
+            return name if name else entry_id
+    return entry_id
+
+
 def _format_single_change(
     type_name: str,
     action: str,
@@ -211,6 +223,7 @@ def _format_single_change(
     old_items: Any,
     new_items: Any,
     map_data: Any,
+    quest_data: Any = None,
 ) -> list[str]:
     data = entry.get("data") or entry.get("changes") or {}
     if not isinstance(data, dict):
@@ -218,7 +231,7 @@ def _format_single_change(
     entry_id = str(entry.get("id", "")).strip()
 
     if type_name == "任務":
-        desc = _get_str(data, "敘述") or entry_id
+        desc = _get_str(data, "名稱") or _get_str(data, "敘述") or _find_quest_name(entry_id, quest_data)
         progress = _get_str(data, "進度")
         if action == "add":
             return [f"接受任務 - {desc}"]
