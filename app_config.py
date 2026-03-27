@@ -35,8 +35,8 @@ class AppConfig:
 
     @classmethod
     def init(cls, base_path: Path) -> AppConfig:
-        """Create (or replace) the singleton from *base_path*/config/config.json."""
-        cls._instance = cls(base_path / "config" / "config.json")
+        """Create (or replace) the singleton from *base_path*/config/settings.json."""
+        cls._instance = cls(base_path / "config" / "settings.json")
         return cls._instance
 
     @classmethod
