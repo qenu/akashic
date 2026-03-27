@@ -10,3 +10,5 @@
 !/main.py
 !/requirements.txt
 !/responses.py
+
+*/__pycache__/*
