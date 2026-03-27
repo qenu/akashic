@@ -63,9 +63,7 @@ class SettingsPage(QWidget):
         cfg = AppConfig.instance()
         self._qsettings = QSettings("erikH", "interactive-chat")
 
-        # Theme is stored under QFluentWidgets.ThemeMode so qfluentwidgets
-        # also picks it up automatically on the next launch.
-        saved_theme_mode = str(cfg.get("QFluentWidgets", "ThemeMode", "Light"))
+        saved_theme_mode = str(cfg.get("ui", "theme_mode", "Light"))
         if saved_theme_mode not in {"Light", "Dark", "Auto"}:
             saved_theme_mode = "Light"
 
@@ -181,7 +179,7 @@ class SettingsPage(QWidget):
 
         def apply_theme_mode(option: str) -> None:
             setTheme(theme_map.get(option, Theme.LIGHT))
-            AppConfig.instance().set("QFluentWidgets", "ThemeMode", option)
+            AppConfig.instance().set("ui", "theme_mode", option)
 
         def apply_window_opacity(value: int) -> None:
             AppConfig.instance().set("ui", "window_opacity", value)
