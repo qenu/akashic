@@ -1,0 +1,459 @@
+from __future__ import annotations
+
+import json
+import random
+import sys
+import threading
+from dataclasses import asdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+from PySide6.QtCore import QObject, QSettings, Signal
+from PySide6.QtWidgets import QApplication
+
+from app_logger import AppLogger
+from responses import APIConfig, APIError, ResponseClient
+from game.records import ChatRecord
+from game.parsing import assistant_chat_payload, condense_assistant_text, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text
+from game.world_io import (
+    resolve_latest_world_folder,
+    is_world_initialized,
+    export_init_world_files,
+    append_novel,
+    archive_and_remove_world,
+    dump_logs,
+    restore_records_from_logs,
+    read_world_json,
+)
+from game.context import build_runtime_context
+from game.changes import apply_changes
+
+log = AppLogger.get_logger("state")
+
+
+class GameStateController(QObject):
+    """Main orchestrator: wires UI signals, manages chat flow, delegates
+    world I/O and context building to dedicated modules."""
+
+    assistant_reply_ready = Signal(str)
+
+    def __init__(self, base_path: Path) -> None:
+        super().__init__()
+        self.records: list[ChatRecord] = []
+        self.story_file_path: Path | None = None
+        self._world_folder_path: Path | None = None
+        self._awaiting_init_export = False
+        self._awaiting_opening_options = False
+        self._init_export_done = False
+        self._settings = QSettings("erikH", "interactive-chat")
+        self._base_path = base_path
+        self._greetings_lines = self._read_prompt_lines("core/greetings.md", "Describe a world you want to live in.")
+        self._core_prompt = self._read_prompt_file("core/system.md", "")
+        self._init_prompt = self._read_prompt_file("core/init.md", "")
+
+        self._restore_existing_world_state()
+        self._api_client = self._build_api_client()
+
+        app = QApplication.instance()
+        self.app = app if app is not None else QApplication(sys.argv)
+
+        from ui import MainWindow, SectionsPage, LibraryPage
+
+        self.window = MainWindow(base_path)
+        sections_page = self.window.findChild(SectionsPage, "sectionsPage")
+        if sections_page is None:
+            raise RuntimeError("Sections page was not found in MainWindow")
+        self.sections_page: SectionsPage = sections_page
+
+        self.library_page: LibraryPage | None = self.window.findChild(LibraryPage, "libraryPage")
+        if self.library_page is not None:
+            self.library_page.refresh_from_latest_world(self._base_path)
+
+        restored_has_options = self._rebuild_chat_ui_from_records()
+        world_init = self._is_world_initialized()
+        should_enable_options = world_init or restored_has_options
+
+        log.info(
+            "Startup state: world_initialized={}, restored_has_options={}, enabling_options={}",
+            world_init, restored_has_options, should_enable_options,
+        )
+
+        self.sections_page.set_options_available(should_enable_options)
+        self.sections_page.user_message_sent.connect(self._on_user_message)
+        self.window.reset_story_requested.connect(self.reset_story)
+        self.assistant_reply_ready.connect(self._on_async_assistant_reply)
+        self._ensure_world_prompt()
+
+    # ------------------------------------------------------------------
+    # Prompt helpers
+    # ------------------------------------------------------------------
+
+    def _read_prompt_file(self, file_name: str, fallback: str) -> str:
+        file_path = self._base_path / file_name
+        if not file_path.exists():
+            log.warning("Prompt file not found: {}", file_path)
+            return fallback
+        content = file_path.read_text(encoding="utf-8").strip()
+        return content if content else fallback
+
+    def _read_prompt_lines(self, file_name: str, fallback: str) -> list[str]:
+        file_path = self._base_path / file_name
+        if not file_path.exists():
+            log.warning("Prompt file not found: {}", file_path)
+            return [fallback]
+        lines = [line.strip() for line in file_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        return lines if lines else [fallback]
+
+    # ------------------------------------------------------------------
+    # Novel log
+    # ------------------------------------------------------------------
+
+    def _append_novel_entry(self, text: str) -> None:
+        if self._world_folder_path is not None:
+            append_novel(self._world_folder_path, text)
+
+    def _append_novel_narrative(self, assistant_text: str) -> None:
+        if self._world_folder_path is None:
+            return
+        payload = extract_json(assistant_text)
+        if not isinstance(payload, dict):
+            return
+        narrative = pick_first_text(payload, NARRATIVE_KEYS)
+        if narrative:
+            append_novel(self._world_folder_path, narrative)
+
+    # ------------------------------------------------------------------
+    # World changes
+    # ------------------------------------------------------------------
+
+    def _apply_world_changes(self, assistant_text: str) -> None:
+        if self._world_folder_path is None:
+            return
+        payload = extract_json(assistant_text)
+        if not isinstance(payload, dict):
+            return
+        changes = payload.get("changes")
+        if isinstance(changes, list) and changes:
+            apply_changes(self._world_folder_path, changes)
+
+    # ------------------------------------------------------------------
+    # API client
+    # ------------------------------------------------------------------
+
+    def _build_api_client(self) -> ResponseClient | None:
+        api_key = str(self._settings.value("ai/api_key", "", type=str)).strip()
+        if not api_key:
+            return None
+        base_url = str(self._settings.value("ai/base_url", "api.x.ai", type=str)).strip()
+        model = str(self._settings.value("ai/model", "grok-3-latest", type=str)).strip()
+        reasoning_model = str(self._settings.value("ai/reasoning_model", "grok-3-mini", type=str)).strip()
+        config = APIConfig(
+            base_url=base_url,
+            api_key=api_key,
+            model=model or "grok-3-latest",
+            reasoning_model=reasoning_model or "grok-3-mini",
+        )
+        return ResponseClient(config)
+
+    # ------------------------------------------------------------------
+    # Restore / rebuild
+    # ------------------------------------------------------------------
+
+    def _restore_existing_world_state(self) -> None:
+        world_folder = resolve_latest_world_folder(self._base_path)
+        if world_folder is None:
+            return
+        self._world_folder_path = world_folder
+        self._init_export_done = True
+
+        restored = restore_records_from_logs(world_folder)
+        if restored:
+            self.records = restored
+
+    def _rebuild_chat_ui_from_records(self) -> bool:
+        if not self.records:
+            return False
+
+        self.sections_page.clear_story_ui()
+        last_options: list[str] = []
+        player_data, item_data, map_data = self._read_player_and_items()
+
+        for record in self.records:
+            if record.role == "user":
+                self.sections_page.add_history_message(text=record.text, is_user=True)
+                continue
+            narrative, status_line, options = assistant_chat_payload(record.text, player_data, item_data, map_data)
+            self.sections_page.add_history_message(text=narrative, status_line=status_line, options=options, is_user=False)
+            if options:
+                last_options = options
+
+        self.sections_page.set_option_candidates(last_options)
+        log.info(
+            "Restored chat UI with {} messages; last options available: {}",
+            len(self.records), bool(last_options),
+        )
+        return bool(last_options)
+
+    def _is_world_initialized(self) -> bool:
+        folder = self._world_folder_path or resolve_latest_world_folder(self._base_path)
+        if folder is None:
+            return False
+
+        initialized = is_world_initialized(self._base_path, folder)
+        if initialized and self._world_folder_path is None:
+            self._world_folder_path = folder
+            self._init_export_done = True
+        return initialized
+
+    # ------------------------------------------------------------------
+    # Chat flow
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _on_user_message(self, text: str) -> None:
+        log.info("Received user message")
+        self.records.append(ChatRecord(role="user", text=text, timestamp_utc=self._now_iso()))
+        self._dump_logs_memory()
+        self._append_novel_entry(text)
+        self._request_assistant_reply()
+
+    def _ensure_world_prompt(self) -> None:
+        if self.records:
+            return
+        if self._init_export_done:
+            return
+        self.sections_page.assistant_message_received.emit(random.choice(self._greetings_lines))
+
+    def _request_assistant_reply(self) -> None:
+        self.sections_page.set_waiting(True)
+        self._api_client = self._build_api_client()
+
+        if self._api_client is None:
+            log.warning("API client unavailable: missing API key")
+            self.sections_page.set_waiting(False)
+            self.sections_page.assistant_message_received.emit(
+                "API key is not set. Add it in Settings to continue."
+            )
+            return
+
+        user_count = sum(1 for r in self.records if r.role == "user")
+        messages: list[dict[str, str]] = []
+        is_world_init_turn = user_count == 1 and (not self._is_world_initialized())
+
+        if is_world_init_turn and self._init_prompt:
+            messages.append({"role": "system", "content": self._init_prompt})
+            self._awaiting_init_export = True
+        else:
+            self._awaiting_init_export = False
+
+        records_for_api = self.records
+        if self._init_export_done:
+            records_for_api = self._records_without_world_builder_turn(self.records)
+
+        if self._world_folder_path is not None:
+            context_payload = build_runtime_context(self._world_folder_path, records_for_api)
+            messages.append({
+                "role": "system",
+                "content": "runtime_context.json\n" + json.dumps(context_payload, ensure_ascii=False),
+            })
+
+        # Keep only the last N exchanges to avoid flooding the context.
+        max_history_turns = 3
+        recent_records = self._trim_to_recent_turns(records_for_api, max_history_turns)
+
+        for record in recent_records:
+            if record.role == "user":
+                messages.append({"role": "user", "content": record.text})
+            elif record.role == "assistant":
+                messages.append({"role": "assistant", "content": condense_assistant_text(record.text)})
+
+        # Place system.md at the very end so it's the last thing the
+        # model sees, making it much harder to ignore.
+        if self._core_prompt and not is_world_init_turn:
+            messages.append({"role": "system", "content": self._core_prompt})
+
+        threading.Thread(
+            target=self._fetch_assistant_reply,
+            args=(messages, is_world_init_turn),
+            daemon=True,
+        ).start()
+
+    @staticmethod
+    def _trim_to_recent_turns(records: list[ChatRecord], max_turns: int) -> list[ChatRecord]:
+        """Keep only the last *max_turns* user/assistant exchange pairs."""
+        user_indices = [i for i, r in enumerate(records) if r.role == "user"]
+        if len(user_indices) <= max_turns:
+            return records
+        cut = user_indices[-max_turns]
+        return records[cut:]
+
+    @staticmethod
+    def _records_without_world_builder_turn(records: list[ChatRecord]) -> list[ChatRecord]:
+        first_user_seen = False
+        first_assistant_seen = False
+        filtered: list[ChatRecord] = []
+
+        for record in records:
+            if not first_user_seen and record.role == "user":
+                first_user_seen = True
+                continue
+            if first_user_seen and (not first_assistant_seen) and record.role == "assistant":
+                first_assistant_seen = True
+                continue
+            filtered.append(record)
+
+        return filtered
+
+    def _fetch_assistant_reply(self, messages: list[dict[str, str]], use_reasoning: bool = False) -> None:
+        if self._api_client is None:
+            self.assistant_reply_ready.emit("API key is not set. Add it in Settings to continue.")
+            return
+        try:
+            log.info("Requesting assistant reply with {} messages (reasoning={})", len(messages), use_reasoning)
+            assistant_text = self._api_client.send_messages(messages, reasoning=use_reasoning)
+        except APIError as exc:
+            log.exception("Assistant request failed")
+            assistant_text = f"API request failed: {exc}"
+        except Exception as exc:
+            log.exception("Assistant request failed with unexpected exception")
+            assistant_text = f"API request failed: {exc}"
+        self.assistant_reply_ready.emit(assistant_text)
+
+    def _on_async_assistant_reply(self, assistant_text: str) -> None:
+        world_builder_completed = False
+
+        if self._awaiting_init_export and not self._init_export_done:
+            new_folder = export_init_world_files(self._base_path, assistant_text)
+            self._awaiting_init_export = False
+            if new_folder is not None:
+                self._world_folder_path = new_folder
+                self._init_export_done = True
+                world_builder_completed = True
+                if self.library_page is not None:
+                    self.library_page.refresh_from_latest_world(self._base_path)
+            else:
+                log.warning("World init export failed; keeping init state so user can retry")
+
+        old_player_data, old_item_data, _ = self._read_player_and_items()
+
+        self._apply_world_changes(assistant_text)
+
+        self.records.append(
+            ChatRecord(role="assistant", text=assistant_text, timestamp_utc=self._now_iso())
+        )
+        self._dump_logs_memory()
+
+        self._append_novel_narrative(assistant_text)
+
+        player_data, item_data, map_data = self._read_player_and_items()
+        narrative, status_line, options = assistant_chat_payload(assistant_text, player_data, item_data, map_data)
+
+        payload = extract_json(assistant_text)
+        raw_changes = payload.get("changes") if isinstance(payload, dict) else []
+        changes_lines = format_changes_lines(
+            raw_changes or [],
+            old_player_data, player_data,
+            old_item_data, item_data,
+            map_data,
+        )
+        changes_text = "\n".join(changes_lines)
+
+        def on_stream_done() -> None:
+            self.sections_page.set_waiting(False)
+            self.sections_page.set_option_candidates(options)
+            if world_builder_completed:
+                self._request_opening_options_after_world_builder()
+            elif self._awaiting_opening_options:
+                self._awaiting_opening_options = False
+                self.sections_page.set_options_available(True)
+
+        self.sections_page.start_stream(
+            narrative,
+            status_line=status_line,
+            changes_text=changes_text,
+            options=options,
+            on_done=on_stream_done,
+        )
+
+    def _request_opening_options_after_world_builder(self) -> None:
+        log.info("World builder completed; requesting opening narrative/options")
+        self._awaiting_opening_options = True
+        self._request_assistant_reply()
+
+    # ------------------------------------------------------------------
+    # Player data helpers
+    # ------------------------------------------------------------------
+
+    def _read_player_and_items(self) -> tuple:
+        if self._world_folder_path is None:
+            return None, None, None
+        player_data = read_world_json(self._world_folder_path, "player.json", {})
+        item_data = read_world_json(self._world_folder_path, "item.json", [])
+        map_data = read_world_json(self._world_folder_path, "map.json", [])
+        return player_data, item_data, map_data
+
+    # ------------------------------------------------------------------
+    # Records persistence
+    # ------------------------------------------------------------------
+
+    def get_records(self) -> list[ChatRecord]:
+        return list(self.records)
+
+    def clear_records(self) -> None:
+        self.records.clear()
+
+    def save_records(self, file_path: str | Path) -> None:
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = [asdict(r) for r in self.records]
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.story_file_path = path
+
+    def load_records(self, file_path: str | Path) -> None:
+        path = Path(file_path)
+        if not path.exists():
+            self._ensure_world_prompt()
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.records = [ChatRecord(**item) for item in data]
+        self.story_file_path = path
+        self._ensure_world_prompt()
+
+    def _dump_logs_memory(self) -> None:
+        if self._world_folder_path is None:
+            return
+        dump_logs(self._world_folder_path, self.records)
+
+    # ------------------------------------------------------------------
+    # Reset
+    # ------------------------------------------------------------------
+
+    def reset_story(self) -> None:
+        if self._world_folder_path is not None:
+            archive_and_remove_world(self._base_path, self._world_folder_path)
+
+        self.clear_records()
+        self._world_folder_path = None
+        self._awaiting_init_export = False
+        self._awaiting_opening_options = False
+        self._init_export_done = False
+        self.sections_page.clear_story_ui()
+        self.sections_page.set_options_available(False)
+        self._api_client = self._build_api_client()
+
+        if self.story_file_path is not None:
+            self.story_file_path.parent.mkdir(parents=True, exist_ok=True)
+            self.story_file_path.write_text("[]\n", encoding="utf-8")
+
+        self._ensure_world_prompt()
+
+    # ------------------------------------------------------------------
+    # Run
+    # ------------------------------------------------------------------
+
+    def run(self) -> int:
+        self.window.show()
+        return self.app.exec()
