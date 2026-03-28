@@ -88,9 +88,39 @@ def restore_records_from_logs(world_folder: Path) -> list[ChatRecord]:
     return restored
 
 
+def append_summary(world_folder: Path, text: str) -> None:
+    """Append a summary entry to summary.md, separated by blank lines."""
+    cleaned = text.strip()
+    if not cleaned:
+        return
+    summary_path = world_folder / "summary.md"
+    existing = summary_path.read_text(encoding="utf-8").rstrip() if summary_path.exists() else ""
+    separator = "\n\n" if existing else ""
+    summary_path.write_text(existing + separator + cleaned + "\n", encoding="utf-8")
+
+
+def read_summary(world_folder: Path) -> str:
+    """Return the full contents of summary.md, or empty string if absent."""
+    summary_path = world_folder / "summary.md"
+    if not summary_path.exists():
+        return ""
+    return summary_path.read_text(encoding="utf-8").strip()
+
+
+def write_summary(world_folder: Path, text: str) -> None:
+    """Overwrite summary.md with the given text (used after compression)."""
+    (world_folder / "summary.md").write_text(text.strip() + "\n", encoding="utf-8")
+
+
+def count_summary_words(world_folder: Path) -> int:
+    """Return the word count of summary.md."""
+    content = read_summary(world_folder)
+    return len(content.split()) if content else 0
+
+
 def append_novel(world_folder: Path, text: str) -> None:
     """Append a narrative or user entry to novel.md, separated by blank lines."""
-    cleaned = " ".join(text.splitlines()).strip()
+    cleaned = text.strip()
     if not cleaned:
         return
     novel_path = world_folder / "novel.md"
@@ -190,6 +220,7 @@ def export_init_world_files(base_path: Path, assistant_text: str) -> Path | None
 
     files = {
         "novel.md": world_data.background_story,
+        "summary.md": "",
         "quest.json": json.dumps(world_data.quest_data, ensure_ascii=False, indent=2),
         "map.json": json.dumps(world_data.map_data, ensure_ascii=False, indent=2),
         "player.json": json.dumps(world_data.player_data, ensure_ascii=False, indent=2),

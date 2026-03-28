@@ -52,6 +52,12 @@ class SectionsPage(QWidget):
         self._thinking_timer = QTimer(self)
         self._thinking_timer.setInterval(360)
         self._thinking_timer.timeout.connect(self._advance_thinking_indicator)
+        self._is_compressing = False
+        self._compressing_frames = ["壓縮中.", "壓縮中..", "壓縮中..."]
+        self._compressing_index = 0
+        self._compressing_timer = QTimer(self)
+        self._compressing_timer.setInterval(360)
+        self._compressing_timer.timeout.connect(self._advance_compressing_indicator)
         self._build_layout()
         self._configure_scrollbar_behavior()
         self._bind_events()
@@ -456,6 +462,24 @@ class SectionsPage(QWidget):
         self.thinking_label.setText(self._thinking_frames[self._thinking_index])
         self._thinking_index = (self._thinking_index + 1) % len(self._thinking_frames)
 
+    def _advance_compressing_indicator(self) -> None:
+        if self._is_waiting:
+            return  # thinking takes priority over compressing label
+        self.thinking_label.setText(self._compressing_frames[self._compressing_index])
+        self._compressing_index = (self._compressing_index + 1) % len(self._compressing_frames)
+
+    def set_compressing(self, is_compressing: bool) -> None:
+        """Show or hide the 壓縮中. indicator without blocking input."""
+        self._is_compressing = is_compressing
+        if is_compressing:
+            self._compressing_index = 0
+            self._advance_compressing_indicator()
+            self._compressing_timer.start()
+        else:
+            self._compressing_timer.stop()
+            if not self._is_waiting:
+                self.thinking_label.clear()
+
     def set_waiting(self, is_waiting: bool) -> None:
         self._is_waiting = is_waiting
         if is_waiting:
@@ -464,7 +488,10 @@ class SectionsPage(QWidget):
             self._thinking_timer.start()
         else:
             self._thinking_timer.stop()
-            self.thinking_label.clear()
+            if self._is_compressing:
+                self._advance_compressing_indicator()
+            else:
+                self.thinking_label.clear()
 
         self.input_box.setEnabled(not is_waiting)
         self._refresh_send_enabled()

@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from game.records import ChatRecord
-from game.world_io import read_world_json
-from game.parsing import extract_json, NARRATIVE_KEYS, OPTION_KEYS, pick_first_text, pick_options, SUMMARY_KEYS
+from game.world_io import read_world_json, read_summary
+from game.parsing import extract_json, NARRATIVE_KEYS, OPTION_KEYS, pick_first_text, pick_options
 
 
 def build_runtime_context(
@@ -24,7 +24,7 @@ def build_runtime_context(
 
     mention_text = _build_reference_scan_text(records)
     mentioned_items = _select_named_entries_by_reference(item_data, mention_text)
-    summaries = _collect_summaries(records)
+    summary = read_summary(world_folder)
 
     return {
         "player": player_data,
@@ -34,7 +34,7 @@ def build_runtime_context(
         "npc": related_npc,
         "item": mentioned_items,
         "skill": skill_data,
-        "summary": summaries,
+        "summary": summary,
     }
 
 
@@ -114,20 +114,6 @@ def _build_reference_scan_text(records: list[ChatRecord]) -> str:
         chunks.append(text)
     return "\n".join(chunks).lower()
 
-
-def _collect_summaries(records: list[ChatRecord]) -> list[str]:
-    """Extract the summary field from every assistant message across all records."""
-    summaries: list[str] = []
-    for record in records:
-        if record.role != "assistant":
-            continue
-        payload = extract_json(record.text)
-        if not isinstance(payload, dict):
-            continue
-        summary = pick_first_text(payload, SUMMARY_KEYS)
-        if summary:
-            summaries.append(summary)
-    return summaries
 
 
 def _extract_entry_name(entry: Any) -> str:

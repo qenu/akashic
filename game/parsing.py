@@ -106,30 +106,27 @@ def extract_options_from_text(text: str) -> list[str]:
     return [item for item in parsed if item]
 
 
+_CONDENSE_STRIP_KEYS: frozenset[str] = frozenset({
+    "changes", "選項", "options", "actions", "可選行動",
+})
+
+
 def condense_assistant_text(assistant_text: str) -> str:
-    """Strip an assistant message to narrative + summary only (for API history)."""
+    """Strip heavy/redundant keys from the assistant JSON for API history.
+
+    Keeps the narrative and summary in their original form (string or list)
+    so the model always sees its own output exactly as written — preserving
+    punctuation and structure and avoiding a feedback-loop degradation where
+    extracted plain text trains the model to write less punctuated prose.
+    """
     payload = extract_json(assistant_text)
     if not isinstance(payload, dict):
         return assistant_text
 
-    narrative = pick_first_text(payload, NARRATIVE_KEYS)
-    summary = pick_first_text(payload, SUMMARY_KEYS)
-
-    if not narrative and not summary:
-        for nested in iter_nested_dicts(payload):
-            if not narrative:
-                narrative = pick_first_text(nested, NARRATIVE_KEYS)
-            if not summary:
-                summary = pick_first_text(nested, SUMMARY_KEYS)
-            if narrative and summary:
-                break
-
-    parts: list[str] = []
-    if narrative:
-        parts.append(narrative)
-    if summary:
-        parts.append(summary)
-    return "\n\n".join(parts) if parts else assistant_text
+    condensed = {k: v for k, v in payload.items() if k not in _CONDENSE_STRIP_KEYS}
+    if not condensed:
+        return assistant_text
+    return json.dumps(condensed, ensure_ascii=False)
 
 
 NARRATIVE_KEYS: list[str] = ["敘事", "narrative", "故事", "內容", "text", "描述", "message"]

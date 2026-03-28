@@ -15,12 +15,16 @@ from app_config import AppConfig
 from app_logger import AppLogger
 from responses import APIConfig, APIError, ResponseClient
 from game.records import ChatRecord
-from game.parsing import assistant_chat_payload, condense_assistant_text, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text
+from game.parsing import assistant_chat_payload, condense_assistant_text, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text, SUMMARY_KEYS
 from game.world_io import (
     resolve_latest_world_folder,
     is_world_initialized,
     export_init_world_files,
     append_novel,
+    append_summary,
+    count_summary_words,
+    read_summary,
+    write_summary,
     archive_and_remove_world,
     dump_logs,
     restore_records_from_logs,
@@ -31,12 +35,15 @@ from game.changes import apply_changes
 
 log = AppLogger.get_logger("state")
 
+SUMMARY_COMPRESSION_THRESHOLD = 1200  # words
+
 
 class GameStateController(QObject):
     """Main orchestrator: wires UI signals, manages chat flow, delegates
     world I/O and context building to dedicated modules."""
 
     assistant_reply_ready = Signal(str)
+    compression_state_changed = Signal(bool)
 
     def __init__(self, base_path: Path) -> None:
         super().__init__()
@@ -46,11 +53,14 @@ class GameStateController(QObject):
         self._awaiting_init_export = False
         self._awaiting_opening_options = False
         self._init_export_done = False
+        self._compression_in_progress = False
+        self._summary_lock = threading.Lock()
         self._config = AppConfig.instance()
         self._base_path = base_path
         self._greetings_lines = self._read_prompt_lines("core/greetings.md", "Describe a world you want to live in.")
         self._core_prompt = self._read_prompt_file("core/system.md", "")
         self._init_prompt = self._read_prompt_file("core/init.md", "")
+        self._compression_prompt = self._read_prompt_file("core/compression.md", "")
 
         self._restore_existing_world_state()
         self._api_client = self._build_api_client()
@@ -83,6 +93,7 @@ class GameStateController(QObject):
         self.sections_page.user_message_sent.connect(self._on_user_message)
         self.window.reset_story_requested.connect(self.reset_story)
         self.assistant_reply_ready.connect(self._on_async_assistant_reply)
+        self.compression_state_changed.connect(self.sections_page.set_compressing)
         self._ensure_world_prompt()
 
     # ------------------------------------------------------------------
@@ -122,6 +133,69 @@ class GameStateController(QObject):
         narrative = pick_first_text(payload, NARRATIVE_KEYS)
         if narrative:
             append_novel(self._world_folder_path, narrative)
+
+    def _append_summary_entry(self, assistant_text: str) -> None:
+        """Extract the summary field from an assistant reply and append it to summary.md.
+        Skipped during the opening options turn (system-generated, not player-driven).
+        Triggers background compression when the file exceeds the word-count threshold."""
+        if self._world_folder_path is None:
+            return
+        if self._awaiting_opening_options:
+            return
+        payload = extract_json(assistant_text)
+        if not isinstance(payload, dict):
+            return
+        summary = pick_first_text(payload, SUMMARY_KEYS)
+        if not summary:
+            return
+        with self._summary_lock:
+            append_summary(self._world_folder_path, summary)
+            word_count = count_summary_words(self._world_folder_path)
+        if word_count >= SUMMARY_COMPRESSION_THRESHOLD and not self._compression_in_progress:
+            self._compression_in_progress = True
+            log.info("Summary exceeded {} words; scheduling compression", SUMMARY_COMPRESSION_THRESHOLD)
+            threading.Thread(target=self._compress_summary, daemon=True).start()
+
+    def _compress_summary(self) -> None:
+        """Compress summary.md in place via a dedicated API call. Runs in a background thread."""
+        world_folder = self._world_folder_path
+        client = self._api_client
+        compression_prompt = self._compression_prompt
+        try:
+            self.compression_state_changed.emit(True)
+            if client is None or not compression_prompt or world_folder is None:
+                log.warning("Summary compression skipped: missing client, prompt, or world folder")
+                return
+            with self._summary_lock:
+                snapshot = read_summary(world_folder)
+            if not snapshot.strip():
+                return
+            snapshot_words = len(snapshot.split())
+            messages = [
+                {"role": "system", "content": compression_prompt},
+                {"role": "user", "content": snapshot},
+            ]
+            log.info("Compressing summary ({} words)…", snapshot_words)
+            compressed = client.send_messages(messages, reasoning=False)
+            if not compressed.strip():
+                log.warning("Summary compression returned empty result; skipping")
+                return
+            if len(compressed.split()) >= snapshot_words:
+                log.warning("Compression result not shorter ({} >= {}); skipping",
+                            len(compressed.split()), snapshot_words)
+                return
+            with self._summary_lock:
+                # Re-read to catch any entries appended during the API call
+                latest = read_summary(world_folder)
+                tail = latest[len(snapshot):].strip()
+                final = compressed.strip() + ("\n\n" + tail if tail else "")
+                write_summary(world_folder, final)
+            log.info("Summary compressed: {} -> {} words", snapshot_words, len(compressed.split()))
+        except Exception as exc:
+            log.warning("Summary compression failed: {}", exc)
+        finally:
+            self._compression_in_progress = False
+            self.compression_state_changed.emit(False)
 
     # ------------------------------------------------------------------
     # World changes
@@ -347,6 +421,7 @@ class GameStateController(QObject):
         self._dump_logs_memory()
 
         self._append_novel_narrative(assistant_text)
+        self._append_summary_entry(assistant_text)
 
         player_data, item_data, map_data = self._read_player_and_items()
         narrative, status_line, options = assistant_chat_payload(assistant_text, player_data, item_data, map_data)
