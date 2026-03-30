@@ -2,7 +2,6 @@ import json
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from urllib.parse import urlparse
 
 from xai_sdk import Client
@@ -39,22 +38,6 @@ class ResponseClient:
 
     def __init__(self, config: APIConfig) -> None:
         self._config = config
-        self._prompt_alias_by_content = self._load_prompt_aliases()
-
-    def _load_prompt_aliases(self) -> dict[str, str]:
-        base_path = Path(__file__).parent / "core"
-        aliases: dict[str, str] = {}
-
-        for file_name in ("system.md", "init.md"):
-            file_path = base_path / file_name
-            if not file_path.exists():
-                continue
-
-            content = file_path.read_text(encoding="utf-8").strip()
-            if content:
-                aliases[content] = file_name
-
-        return aliases
 
     @staticmethod
     def _to_sdk_messages(messages: list[dict[str, str]]) -> list:
@@ -71,22 +54,6 @@ class ResponseClient:
                 sdk_messages.append(user(content))
         return sdk_messages
 
-    def _messages_for_log(self, messages: list[dict[str, str]]) -> list[dict[str, str]]:
-        sanitized: list[dict[str, str]] = []
-        for message in messages:
-            role = str(message.get("role", "")).strip().lower()
-            content = str(message.get("content", ""))
-            normalized_content = content.strip()
-            alias = self._prompt_alias_by_content.get(normalized_content)
-
-            if role == "system" and alias:
-                sanitized.append({"role": role, "content": alias})
-                continue
-
-            sanitized.append({"role": role, "content": content})
-
-        return sanitized
-
     def _normalized_api_host(self) -> str:
         value = self._config.base_url.strip()
         if not value:
@@ -99,9 +66,26 @@ class ResponseClient:
 
         return value.strip("/")
 
+    @staticmethod
+    def _log_input(messages: list[dict[str, str]]) -> None:
+        user_content = next(
+            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+            "(no user message)",
+        )
+        log.info("API input — user: {}", user_content)
+
+    @staticmethod
+    def _log_output(content: str) -> None:
+        try:
+            payload = json.loads(content)
+        except (json.JSONDecodeError, ValueError):
+            payload = {}
+        summary = payload.get("摘要") or payload.get("summary", "")
+        changes = payload.get("changes", [])
+        log.info("API output — summary: {} | changes: {}", summary, json.dumps(changes, ensure_ascii=False))
+
     def send_messages(self, messages: list[dict[str, str]], *, reasoning: bool = False) -> str:
-        log_safe_messages = self._messages_for_log(messages)
-        log.info("API raw input (reasoning={}): {}", reasoning, json.dumps(log_safe_messages, ensure_ascii=False))
+        self._log_input(messages)
         sdk_messages = self._to_sdk_messages(messages)
 
         model = (self._config.reasoning_model or self._config.model) if reasoning else self._config.model
@@ -122,7 +106,15 @@ class ResponseClient:
                 )
                 response = chat.sample()
                 content = (response.content or "").strip()
-                log.info("API raw output: {}", content)
+                usage = response.usage
+                log.info(
+                    "API tokens — prompt: {}, completion: {}, reasoning: {}, total: {}",
+                    usage.prompt_tokens,
+                    usage.completion_tokens,
+                    usage.reasoning_tokens,
+                    usage.total_tokens,
+                )
+                self._log_output(content)
                 if not content:
                     raise APIError("Unexpected API response format")
                 return content
@@ -142,8 +134,7 @@ class ResponseClient:
         raise APIError("All retry attempts exhausted")
 
     def stream_messages(self, messages: list[dict[str, str]]) -> Iterator[str]:
-        log_safe_messages = self._messages_for_log(messages)
-        log.info("API stream input: {}", json.dumps(log_safe_messages, ensure_ascii=False))
+        self._log_input(messages)
         sdk_messages = self._to_sdk_messages(messages)
 
         client = Client(
