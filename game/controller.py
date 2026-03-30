@@ -15,7 +15,7 @@ from app_config import AppConfig
 from app_logger import AppLogger
 from responses import APIConfig, APIError, ResponseClient
 from game.records import ChatRecord
-from game.parsing import assistant_chat_payload, condense_assistant_text, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text, SUMMARY_KEYS
+from game.parsing import assistant_chat_payload, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text, SUMMARY_KEYS
 from game.world_io import (
     resolve_latest_world_folder,
     is_world_initialized,
@@ -44,6 +44,7 @@ class GameStateController(QObject):
 
     assistant_reply_ready = Signal(str)
     compression_state_changed = Signal(bool)
+    world_data_updated = Signal()
 
     def __init__(self, base_path: Path) -> None:
         super().__init__()
@@ -71,13 +72,26 @@ class GameStateController(QObject):
         app = QApplication.instance()
         self.app = app if app is not None else QApplication(sys.argv)
 
-        from ui import MainWindow, SectionsPage, LibraryPage
+        from ui import MainWindow, SectionsPage, LibraryPage, ItemPage, QuestPage, EquipmentPage
 
         self.window = MainWindow(base_path)
         sections_page = self.window.findChild(SectionsPage, "sectionsPage")
         if sections_page is None:
             raise RuntimeError("Sections page was not found in MainWindow")
         self.sections_page: SectionsPage = sections_page
+
+        item_page: ItemPage | None = self.window.findChild(ItemPage, "itemPage")
+        if item_page is not None:
+            item_page.item_used.connect(self._on_item_used)
+            self.world_data_updated.connect(item_page.refresh)
+
+        quest_page: QuestPage | None = self.window.findChild(QuestPage, "questPage")
+        if quest_page is not None:
+            self.world_data_updated.connect(quest_page.refresh)
+
+        equipment_page: EquipmentPage | None = self.window.findChild(EquipmentPage, "equipmentPage")
+        if equipment_page is not None:
+            self.world_data_updated.connect(equipment_page.refresh)
 
         self.library_page: LibraryPage | None = self.window.findChild(LibraryPage, "libraryPage")
         if self.library_page is not None:
@@ -231,6 +245,8 @@ class GameStateController(QObject):
             else:
                 apply_changes(self._world_folder_path, [new_skill])
 
+        self.world_data_updated.emit()
+
     # ------------------------------------------------------------------
     # API client
     # ------------------------------------------------------------------
@@ -315,6 +331,13 @@ class GameStateController(QObject):
         self._dump_logs_memory()
         self._append_novel_entry(text)
         self._request_assistant_reply()
+
+    def _on_item_used(self, item_name: str) -> None:
+        if not self._init_export_done:
+            return
+        message = f"我使用了道具：{item_name}"
+        self.sections_page.add_history_message(text=message, is_user=True)
+        self._on_user_message(message)
 
     # ------------------------------------------------------------------
     # Skill flow
@@ -420,17 +443,6 @@ class GameStateController(QObject):
                 "content": "runtime_context.json\n" + json.dumps(context_payload, ensure_ascii=False),
             })
 
-        # Keep only the last N exchanges to avoid flooding the context.
-        # TODO: temporarily disabled – re-enable chat history in messages
-        # max_history_turns = 3
-        # recent_records = self._trim_to_recent_turns(records_for_api, max_history_turns)
-        #
-        # for record in recent_records:
-        #     if record.role == "user":
-        #         messages.append({"role": "user", "content": record.text})
-        #     elif record.role == "assistant":
-        #         messages.append({"role": "assistant", "content": condense_assistant_text(record.text)})
-
         # Inject only the latest user message so the model knows what to respond to.
         if records_for_api:
             latest = records_for_api[-1]
@@ -447,15 +459,6 @@ class GameStateController(QObject):
             args=(messages, is_world_init_turn),
             daemon=True,
         ).start()
-
-    @staticmethod
-    def _trim_to_recent_turns(records: list[ChatRecord], max_turns: int) -> list[ChatRecord]:
-        """Keep only the last *max_turns* user/assistant exchange pairs."""
-        user_indices = [i for i, r in enumerate(records) if r.role == "user"]
-        if len(user_indices) <= max_turns:
-            return records
-        cut = user_indices[-max_turns]
-        return records[cut:]
 
     @staticmethod
     def _records_without_world_builder_turn(records: list[ChatRecord]) -> list[ChatRecord]:

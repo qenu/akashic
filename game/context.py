@@ -18,6 +18,7 @@ def build_runtime_context(
     item_data = read_world_json(world_folder, "item.json", [])
     skill_data = read_world_json(world_folder, "skill.json", [])
     equipment_data = read_world_json(world_folder, "equipment.json", [])
+    worldview_data = read_world_json(world_folder, "worldview.json", {})
 
     # Only send equipment currently in use; strip the client-only flag before sending.
     active_equipment = [
@@ -35,6 +36,7 @@ def build_runtime_context(
     summary = read_summary(world_folder)
 
     return {
+        "worldview": worldview_data,
         "player": player_data,
         "quest": quest_data,
         "location_id": location_id,

@@ -227,6 +227,10 @@ def export_init_world_files(base_path: Path, assistant_text: str) -> Path | None
     files = {
         "novel.md": world_data.background_story,
         "summary.md": "",
+        "worldview.json": json.dumps(
+            {"標題": world_data.world_title, "背景": world_data.background_story},
+            ensure_ascii=False, indent=2,
+        ),
         "quest.json": json.dumps(world_data.quest_data, ensure_ascii=False, indent=2),
         "map.json": json.dumps(world_data.map_data, ensure_ascii=False, indent=2),
         "player.json": json.dumps(world_data.player_data, ensure_ascii=False, indent=2),

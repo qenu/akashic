@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QShowEvent, QHideEvent
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
@@ -14,102 +13,29 @@ from qfluentwidgets import (
     InfoBarPosition,
     MessageBox,
     SimpleCardWidget,
-    SingleDirectionScrollArea,
     SubtitleLabel,
-    TitleLabel,
     ToggleButton,
     ToolButton,
 )
 
-from game.world_io import resolve_latest_world_folder, read_world_json
+from ui.world_data_page import WorldDataPage
 
 
-class EquipmentPage(QWidget):
+class EquipmentPage(WorldDataPage):
     def __init__(self, base_path: Path | None = None) -> None:
-        super().__init__()
-        self.setObjectName("equipmentPage")
-        self._base_path: Path = base_path or Path.cwd()
-        self._world_folder: Path | None = None
-        self._equipment: list[dict] = []
-        self._toggles: list[tuple[dict, ToggleButton]] = []
-        self._build_layout()
-
-    # ------------------------------------------------------------------
-    # Layout
-    # ------------------------------------------------------------------
-
-    def _build_layout(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(12)
-
-        layout.addWidget(TitleLabel("Equipments"))
-
-        self.scroll_area = SingleDirectionScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("background: transparent; border: none;")
-
-        self.content_widget = QWidget()
-        self.content_widget.setStyleSheet("background: transparent;")
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(10)
-        self.content_layout.addStretch(1)
-        self.scroll_area.setWidget(self.content_widget)
-
-        layout.addWidget(self.scroll_area, 1)
-
-    # ------------------------------------------------------------------
-    # Qt events
-    # ------------------------------------------------------------------
-
-    def showEvent(self, event: QShowEvent) -> None:
-        super().showEvent(event)
-        self._load_equipment()
-
-    def hideEvent(self, event: QHideEvent) -> None:
-        super().hideEvent(event)
-        self._save_equipment()
-
-    # ------------------------------------------------------------------
-    # Load / save
-    # ------------------------------------------------------------------
-
-    def _load_equipment(self) -> None:
-        self._world_folder = resolve_latest_world_folder(self._base_path)
-        if self._world_folder is None:
-            self._equipment = []
-        else:
-            self._equipment = read_world_json(self._world_folder, "equipment.json", [])
-        self._rebuild_cards()
-
-    def _save_equipment(self) -> None:
-        if self._world_folder is None or not self._equipment:
-            return
-        target = self._world_folder / "equipment.json"
-        target.write_text(
-            json.dumps(self._equipment, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+        super().__init__(
+            object_name="equipmentPage",
+            title="Equipments",
+            json_file="equipment.json",
+            base_path=base_path,
         )
-
-    # ------------------------------------------------------------------
-    # Cards
-    # ------------------------------------------------------------------
+        self._toggles: list[tuple[dict, ToggleButton]] = []
 
     def _rebuild_cards(self) -> None:
         self._toggles.clear()
-        # Remove all items except the trailing stretch
-        while self.content_layout.count() > 1:
-            item = self.content_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        super()._rebuild_cards()
 
-        for eq in self._equipment:
-            if isinstance(eq, dict):
-                card = self._build_card(eq)
-                self.content_layout.insertWidget(self.content_layout.count() - 1, card)
-
-    def _build_card(self, eq: dict) -> SimpleCardWidget:
+    def _build_card(self, entry: dict) -> SimpleCardWidget:
         card = SimpleCardWidget()
         card.setFixedHeight(100)
 
@@ -117,13 +43,12 @@ class EquipmentPage(QWidget):
         row.setContentsMargins(16, 12, 16, 12)
         row.setSpacing(12)
 
-        # Left: name + class + purpose
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
 
-        name_label = SubtitleLabel(eq.get("名稱", ""))
-        class_label = CaptionLabel(eq.get("分類", ""))
-        purpose_label = BodyLabel(eq.get("用途", ""))
+        name_label = SubtitleLabel(entry.get("名稱", ""))
+        class_label = CaptionLabel(entry.get("分類", ""))
+        purpose_label = BodyLabel(entry.get("用途", ""))
         purpose_label.setFont(QFont(purpose_label.font().family(), 12))
         purpose_label.setWordWrap(True)
 
@@ -134,44 +59,40 @@ class EquipmentPage(QWidget):
 
         row.addLayout(info_col, 1)
 
-        # Right: toggle button
-        is_equipped = eq.get("使用中", False)
+        is_equipped = entry.get("使用中", False)
         toggle = ToggleButton("裝備中" if is_equipped else "裝備")
         toggle.setChecked(is_equipped)
         toggle.setFixedWidth(80)
-        toggle.toggled.connect(lambda checked, e=eq, t=toggle: self._on_toggle(e, t, checked))
+        toggle.toggled.connect(lambda checked, e=entry, t=toggle: self._on_toggle(e, t, checked))
 
         row.addWidget(toggle, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Trash button
         trash_btn = ToolButton(FIF.DELETE, card)
         trash_btn.setFixedSize(32, 32)
-        trash_btn.clicked.connect(lambda _, e=eq: self._on_delete(e))
+        trash_btn.clicked.connect(lambda _, e=entry: self._on_delete(e))
 
         row.addWidget(trash_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._toggles.append((eq, toggle))
+        self._toggles.append((entry, toggle))
         return card
 
-    def _on_delete(self, eq: dict) -> None:
-        name = eq.get("名稱", "")
+    def _on_delete(self, entry: dict) -> None:
+        name = entry.get("名稱", "")
         dlg = MessageBox("確認丟棄", f"確定要丟掉 {name} 嗎?", self)
         dlg.yesButton.setText("確認")
         dlg.cancelButton.setText("取消")
         if dlg.exec():
-            self._equipment = [e for e in self._equipment if e is not eq]
-            self._rebuild_cards()
+            self._remove_entry(entry)
 
-    def _on_toggle(self, eq: dict, toggle: ToggleButton, checked: bool) -> None:
-        eq["使用中"] = checked
-        name = eq.get("名稱", "")
+    def _on_toggle(self, entry: dict, toggle: ToggleButton, checked: bool) -> None:
+        entry["使用中"] = checked
+        name = entry.get("名稱", "")
 
         if checked:
             toggle.setText("裝備中")
-            # Unequip any other item in the same 分類
-            category = eq.get("分類", "")
+            category = entry.get("分類", "")
             for other_eq, other_toggle in self._toggles:
-                if other_eq is eq:
+                if other_eq is entry:
                     continue
                 if other_eq.get("分類", "") == category and other_eq.get("使用中", False):
                     other_eq["使用中"] = False
