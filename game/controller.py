@@ -45,6 +45,7 @@ class GameStateController(QObject):
     assistant_reply_ready = Signal(str)
     compression_state_changed = Signal(bool)
     world_data_updated = Signal()
+    api_error_occurred = Signal(str)
 
     def __init__(self, base_path: Path) -> None:
         super().__init__()
@@ -113,6 +114,7 @@ class GameStateController(QObject):
         self.window.reset_story_requested.connect(self.reset_story)
         self.assistant_reply_ready.connect(self._on_async_assistant_reply)
         self.compression_state_changed.connect(self.sections_page.set_compressing)
+        self.api_error_occurred.connect(self._on_api_error)
         self._ensure_world_prompt()
 
     # ------------------------------------------------------------------
@@ -332,6 +334,10 @@ class GameStateController(QObject):
         self._append_novel_entry(text)
         self._request_assistant_reply()
 
+    def _on_api_error(self, message: str) -> None:
+        self.sections_page.set_waiting(False)
+        self.sections_page.show_error(message)
+
     def _on_item_used(self, item_name: str) -> None:
         if not self._init_export_done:
             return
@@ -417,10 +423,7 @@ class GameStateController(QObject):
 
         if self._api_client is None:
             log.warning("API client unavailable: missing API key")
-            self.sections_page.set_waiting(False)
-            self.sections_page.assistant_message_received.emit(
-                "API key is not set. Add it in Settings to continue."
-            )
+            self.api_error_occurred.emit("API key is not set. Add it in Settings to continue.")
             return
 
         messages: list[dict[str, str]] = []
@@ -479,17 +482,19 @@ class GameStateController(QObject):
 
     def _fetch_assistant_reply(self, messages: list[dict[str, str]], use_reasoning: bool = False) -> None:
         if self._api_client is None:
-            self.assistant_reply_ready.emit("API key is not set. Add it in Settings to continue.")
+            self.api_error_occurred.emit("API key is not set. Add it in Settings to continue.")
             return
         try:
             log.info("Requesting assistant reply with {} messages (reasoning={})", len(messages), use_reasoning)
             assistant_text = self._api_client.send_messages(messages, reasoning=use_reasoning)
         except APIError as exc:
             log.exception("Assistant request failed")
-            assistant_text = f"API request failed: {exc}"
+            self.api_error_occurred.emit(str(exc))
+            return
         except Exception as exc:
             log.exception("Assistant request failed with unexpected exception")
-            assistant_text = f"API request failed: {exc}"
+            self.api_error_occurred.emit(str(exc))
+            return
         self.assistant_reply_ready.emit(assistant_text)
 
     def _on_async_assistant_reply(self, assistant_text: str) -> None:

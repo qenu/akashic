@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     BodyLabel,
     FluentIcon as FIF,
+    InfoBar,
+    InfoBarPosition,
     isDarkTheme,
     PushButton,
     qconfig,
@@ -583,6 +585,15 @@ class SectionsPage(QWidget):
         self._font_size = size
         self._apply_chat_theme_styles()
         self._apply_word_count_style(force=True)
+
+    def show_error(self, message: str) -> None:
+        InfoBar.error(
+            title="錯誤",
+            content=message,
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=6000,
+        )
 
     def clear_story_ui(self) -> None:
         self._stream_timer.stop()
