@@ -6,6 +6,9 @@ from qfluentwidgets import FluentIcon as FIF, FluentWindow, NavigationItemPositi
 from ui.chat_page import SectionsPage
 from ui.library_page import LibraryPage
 from ui.settings_page import SettingsPage
+from ui.quest_page import QuestPage
+from ui.item_page import ItemPage
+from ui.equipment_page import EquipmentPage
 
 
 class MainWindow(FluentWindow):
@@ -22,10 +25,25 @@ class MainWindow(FluentWindow):
         sections_page = SectionsPage()
         library_page = LibraryPage(self._base_path)
         settings_page = SettingsPage()
+        quest_page = QuestPage(self._base_path)
+        item_page = ItemPage(self._base_path)
+        equipment_page = EquipmentPage(self._base_path)
 
         self.addSubInterface(sections_page, FIF.CHAT, "Chat Area")
         self.addSubInterface(
             library_page, FIF.FOLDER, "Library",
+            position=NavigationItemPosition.SCROLL,
+        )
+        self.addSubInterface(
+            quest_page, FIF.BOOK_SHELF, "Quest",
+            position=NavigationItemPosition.SCROLL,
+        )
+        self.addSubInterface(
+            item_page, FIF.SHOPPING_CART, "Item",
+            position=NavigationItemPosition.SCROLL,
+        )
+        self.addSubInterface(
+            equipment_page, FIF.GAME, "Equipment",
             position=NavigationItemPosition.SCROLL,
         )
         self.addSubInterface(

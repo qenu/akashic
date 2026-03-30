@@ -195,6 +195,12 @@ def parse_init_response(assistant_text: str) -> InitWorldData:
         if item_data is None:
             item_data = system_data.get("道具")
 
+    # Stamp the client-only 使用中 flag on all initial equipment.
+    if isinstance(equipment_data, list):
+        for eq in equipment_data:
+            if isinstance(eq, dict):
+                eq["使用中"] = True
+
     return InitWorldData(
         world_title=title,
         background_story=str(worldview.get("背景", "")).strip(),

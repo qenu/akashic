@@ -17,6 +17,14 @@ def build_runtime_context(
     npc_data = read_world_json(world_folder, "npc.json", [])
     item_data = read_world_json(world_folder, "item.json", [])
     skill_data = read_world_json(world_folder, "skill.json", [])
+    equipment_data = read_world_json(world_folder, "equipment.json", [])
+
+    # Only send equipment currently in use; strip the client-only flag before sending.
+    active_equipment = [
+        {k: v for k, v in eq.items() if k != "使用中"}
+        for eq in (equipment_data if isinstance(equipment_data, list) else [])
+        if isinstance(eq, dict) and eq.get("使用中") is True
+    ]
 
     location_id = _extract_location_id(player_data)
     related_map = _filter_map_by_location(map_data, location_id)
@@ -34,6 +42,7 @@ def build_runtime_context(
         "npc": related_npc,
         "item": mentioned_items,
         "skill": skill_data,
+        "equipment": active_equipment,
         "summary": summary,
     }
 

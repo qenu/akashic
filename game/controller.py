@@ -55,9 +55,12 @@ class GameStateController(QObject):
         self._init_export_done = False
         self._compression_in_progress = False
         self._summary_lock = threading.Lock()
+        self._skill_mode = "idle"  # "idle" | "use" | "forget"
+        self._pending_new_skill: dict | None = None
+        self._last_story_options: list[str] = []
         self._config = AppConfig.instance()
         self._base_path = base_path
-        self._greetings_lines = self._read_prompt_lines("core/greetings.md", "Describe a world you want to live in.")
+        self._greetings_lines = self._read_prompt_lines("core/template/greetings.md", "Describe a world you want to live in.")
         self._core_prompt = self._read_prompt_file("core/system.md", "")
         self._init_prompt = self._read_prompt_file("core/init.md", "")
         self._compression_prompt = self._read_prompt_file("core/compression.md", "")
@@ -91,6 +94,8 @@ class GameStateController(QObject):
 
         self.sections_page.set_options_available(should_enable_options)
         self.sections_page.user_message_sent.connect(self._on_user_message)
+        self.sections_page.skill_button_clicked.connect(self._on_skill_button_clicked)
+        self.sections_page.skill_candidate_selected.connect(self._on_skill_candidate_selected)
         self.window.reset_story_requested.connect(self.reset_story)
         self.assistant_reply_ready.connect(self._on_async_assistant_reply)
         self.compression_state_changed.connect(self.sections_page.set_compressing)
@@ -208,8 +213,23 @@ class GameStateController(QObject):
         if not isinstance(payload, dict):
             return
         changes = payload.get("changes")
-        if isinstance(changes, list) and changes:
-            apply_changes(self._world_folder_path, changes)
+        if not isinstance(changes, list) or not changes:
+            return
+
+        new_skill_adds = [c for c in changes if c.get("action") == "add" and c.get("type") == "技能"]
+        other_changes = [c for c in changes if not (c.get("action") == "add" and c.get("type") == "技能")]
+
+        if other_changes:
+            apply_changes(self._world_folder_path, other_changes)
+
+        for new_skill in new_skill_adds:
+            current_skills = read_world_json(self._world_folder_path, "skill.json", [])
+            current_count = len(current_skills) if isinstance(current_skills, list) else 0
+            if current_count >= self.MAX_SKILLS:
+                self._pending_new_skill = new_skill
+                self._trigger_forget_skill_prompt(current_skills)
+            else:
+                apply_changes(self._world_folder_path, [new_skill])
 
     # ------------------------------------------------------------------
     # API client
@@ -262,6 +282,7 @@ class GameStateController(QObject):
             if options:
                 last_options = options
 
+        self._last_story_options = last_options
         self.sections_page.set_option_candidates(last_options)
         log.info(
             "Restored chat UI with {} messages; last options available: {}",
@@ -294,6 +315,71 @@ class GameStateController(QObject):
         self._dump_logs_memory()
         self._append_novel_entry(text)
         self._request_assistant_reply()
+
+    # ------------------------------------------------------------------
+    # Skill flow
+    # ------------------------------------------------------------------
+
+    MAX_SKILLS = 4
+
+    def _on_skill_button_clicked(self) -> None:
+        if self._skill_mode != "idle":
+            self._exit_skill_mode(notification="放棄使用技能")
+            return
+        if self._world_folder_path is None:
+            return
+        skills = read_world_json(self._world_folder_path, "skill.json", [])
+        if not isinstance(skills, list) or not skills:
+            self.sections_page.assistant_message_received.emit("你目前沒有任何技能。")
+            return
+        lines = ["你要使用哪個技能？"]
+        for i, skill in enumerate(skills, 1):
+            name = skill.get("名稱", "未知技能")
+            effect = skill.get("效果", "")
+            lines.append(f"{i}. {name}：{effect}")
+        self.sections_page.show_skill_prompt("\n".join(lines))
+        self._skill_mode = "use"
+        self.sections_page.set_skill_button_mode("use")
+        self.sections_page.set_skill_candidates(skills)
+
+    def _on_skill_candidate_selected(self, skill_name: str) -> None:
+        if self._skill_mode == "use":
+            self._exit_skill_mode(notification=f"使用了{skill_name}")
+            self._on_user_message(f"我使用了技能：{skill_name}")
+        elif self._skill_mode == "forget":
+            self._forget_skill_and_apply(skill_name)
+
+    def _exit_skill_mode(self, notification: str = "放棄使用技能") -> None:
+        self._skill_mode = "idle"
+        self.sections_page.set_skill_button_mode("idle")
+        self.sections_page.dismiss_skill_prompt(notification)
+        self.sections_page.set_option_candidates(self._last_story_options)
+
+    def _trigger_forget_skill_prompt(self, current_skills: list) -> None:
+        data = self._pending_new_skill.get("data", {}) if self._pending_new_skill else {}
+        new_skill_name = data.get("名稱", "新技能")
+        lines = [f"你習得了「{new_skill_name}」，但技能欄已滿。要遺忘哪個技能？"]
+        for i, skill in enumerate(current_skills, 1):
+            name = skill.get("名稱", "未知技能")
+            effect = skill.get("效果", "")
+            lines.append(f"{i}. {name}：{effect}")
+        self.sections_page.show_skill_prompt("\n".join(lines))
+        self._skill_mode = "forget"
+        self.sections_page.set_skill_button_mode("forget")
+        self.sections_page.set_skill_candidates(current_skills)
+
+    def _forget_skill_and_apply(self, skill_name: str) -> None:
+        if self._world_folder_path is None or self._pending_new_skill is None:
+            self._exit_skill_mode(notification="放棄學習技能")
+            return
+        skills = read_world_json(self._world_folder_path, "skill.json", [])
+        skill_to_remove = next((s for s in skills if s.get("名稱") == skill_name), None)
+        if skill_to_remove and skill_to_remove.get("id"):
+            remove_change = {"action": "remove", "type": "技能", "id": skill_to_remove["id"]}
+            apply_changes(self._world_folder_path, [remove_change, self._pending_new_skill])
+        new_skill_name = self._pending_new_skill.get("data", {}).get("名稱", "技能")
+        self._pending_new_skill = None
+        self._exit_skill_mode(notification=f"遺忘了{skill_name}，習得了{new_skill_name}")
 
     def _ensure_world_prompt(self) -> None:
         if self.records:
@@ -335,14 +421,21 @@ class GameStateController(QObject):
             })
 
         # Keep only the last N exchanges to avoid flooding the context.
-        max_history_turns = 3
-        recent_records = self._trim_to_recent_turns(records_for_api, max_history_turns)
+        # TODO: temporarily disabled – re-enable chat history in messages
+        # max_history_turns = 3
+        # recent_records = self._trim_to_recent_turns(records_for_api, max_history_turns)
+        #
+        # for record in recent_records:
+        #     if record.role == "user":
+        #         messages.append({"role": "user", "content": record.text})
+        #     elif record.role == "assistant":
+        #         messages.append({"role": "assistant", "content": condense_assistant_text(record.text)})
 
-        for record in recent_records:
-            if record.role == "user":
-                messages.append({"role": "user", "content": record.text})
-            elif record.role == "assistant":
-                messages.append({"role": "assistant", "content": condense_assistant_text(record.text)})
+        # Inject only the latest user message so the model knows what to respond to.
+        if records_for_api:
+            latest = records_for_api[-1]
+            if latest.role == "user":
+                messages.append({"role": "user", "content": latest.text})
 
         # Place system.md at the very end so it's the last thing the
         # model sees, making it much harder to ignore.
@@ -439,6 +532,7 @@ class GameStateController(QObject):
 
         def on_stream_done() -> None:
             self.sections_page.set_waiting(False)
+            self._last_story_options = options
             self.sections_page.set_option_candidates(options)
             if world_builder_completed:
                 self._request_opening_options_after_world_builder()

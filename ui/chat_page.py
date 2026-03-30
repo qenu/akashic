@@ -24,6 +24,8 @@ from app_config import AppConfig
 class SectionsPage(QWidget):
     user_message_sent = Signal(str)
     assistant_message_received = Signal(str)
+    skill_button_clicked = Signal()
+    skill_candidate_selected = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,6 +46,8 @@ class SectionsPage(QWidget):
         self._stream_timer.setInterval(60)
         self._stream_timer.timeout.connect(self._stream_tick)
         self._option_placeholders = ["Option 1", "Option 2", "Option 3", "Option 4"]
+        self._skill_mode = "idle"  # "idle" | "use" | "forget"
+        self._skill_prompt_widget: QWidget | None = None
         self._auto_scroll_enabled = True
         self._programmatic_scroll = False
         self._bottom_threshold = 6
@@ -119,17 +123,13 @@ class SectionsPage(QWidget):
         )
         self._apply_word_count_style(force=True)
 
-        input_meta_row = QWidget()
-        input_meta_layout = QHBoxLayout(input_meta_row)
-        input_meta_layout.setContentsMargins(0, 0, 0, 0)
-        input_meta_layout.addStretch(1)
-        input_meta_layout.addWidget(self.word_count_label)
+        options_row.layout().addStretch(1)
+        options_row.layout().addWidget(self.word_count_label)
 
         layout.addWidget(chat_label)
         layout.addWidget(self.chat_area, 1)
         layout.addWidget(self.thinking_label)
         layout.addWidget(self.input_container)
-        layout.addWidget(input_meta_row)
         layout.addWidget(options_row)
         self._on_input_text_changed(self.input_box.text())
 
@@ -151,11 +151,76 @@ class SectionsPage(QWidget):
             button_layout.addWidget(button)
             self.option_buttons.append(button)
 
-        button_layout.addStretch(1)
+        self.skill_button = PushButton("使用技能")
+        self.skill_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        button_layout.addWidget(self.skill_button)
+
         return container
+
+    def show_skill_prompt(self, text: str) -> None:
+        """Show the skill selection bubble and keep a reference for later removal."""
+        bubble = SimpleCardWidget()
+        bubble_layout = QVBoxLayout(bubble)
+        bubble_layout.setContentsMargins(12, 10, 12, 10)
+        bubble_layout.setSpacing(4)
+        bubble_layout.addWidget(self._create_message_label(text, is_user=False))
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, bubble)
+        self._skill_prompt_widget = bubble
+        self._request_scroll_to_bottom()
+
+    def dismiss_skill_prompt(self, notification: str) -> None:
+        """Remove the skill selection bubble and show a compact action subtext."""
+        if self._skill_prompt_widget is not None:
+            idx = self.chat_layout.indexOf(self._skill_prompt_widget)
+            if idx >= 0:
+                item = self.chat_layout.takeAt(idx)
+                widget = item.widget() if item else None
+                if widget is not None:
+                    widget.deleteLater()
+            self._skill_prompt_widget = None
+
+        note_container = QWidget()
+        note_layout = QVBoxLayout(note_container)
+        note_layout.setContentsMargins(12, 0, 0, 0)
+        note_layout.setSpacing(0)
+        label = self._create_message_label(notification, is_user=True)
+        note_layout.addWidget(label)
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, note_container)
+        self._request_scroll_to_bottom()
+
+    def set_skill_button_mode(self, mode: str) -> None:
+        """Switch the skill button label and track skill interaction mode.
+        mode: 'idle' | 'use' | 'forget'
+        """
+        self._skill_mode = mode
+        if mode == "use":
+            self.skill_button.setText("放棄使用技能")
+        elif mode == "forget":
+            self.skill_button.setText("放棄學習技能")
+        else:
+            self.skill_button.setText("使用技能")
+        self._refresh_option_buttons_enabled()
+
+    def set_skill_candidates(self, skills: list) -> None:
+        """Replace option buttons with skill name buttons for skill selection."""
+        for index, button in enumerate(self.option_buttons):
+            if index < len(skills):
+                skill = skills[index]
+                name = str(skill.get("名稱", f"技能 {index + 1}"))
+                button.setProperty("option_payload", name)
+                button.setText(name)
+                button.setVisible(True)
+                button.setEnabled((not self._is_waiting) and self._options_available)
+            else:
+                button.setProperty("option_payload", "")
+                button.setVisible(False)
+                button.setEnabled(False)
 
     def _send_option(self, option_text: str) -> None:
         if not option_text:
+            return
+        if self._skill_mode != "idle":
+            self.skill_candidate_selected.emit(option_text)
             return
         self._handle_send(option_text)
 
@@ -192,6 +257,7 @@ class SectionsPage(QWidget):
     def _bind_events(self) -> None:
         self.user_message_sent.connect(self._on_user_message)
         self.assistant_message_received.connect(self._on_assistant_message)
+        self.skill_button.clicked.connect(self.skill_button_clicked.emit)
 
     def _create_message_label(self, text: str, *, is_user: bool) -> QLabel:
         label = QLabel(text)
@@ -446,6 +512,7 @@ class SectionsPage(QWidget):
                 button.setEnabled(False)
                 continue
             button.setEnabled(enabled)
+        self.skill_button.setEnabled(enabled)
 
     def set_options_available(self, is_available: bool) -> None:
         self._options_available = is_available

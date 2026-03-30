@@ -6,6 +6,7 @@ from typing import Any
 
 from app_logger import AppLogger
 from game.world_io import read_world_json
+from game.validation import _Rules
 
 log = AppLogger.get_logger("changes")
 
@@ -28,24 +29,8 @@ _CANONICAL_TYPE: dict[str, str] = {
     "item": "道具", "equipment": "裝備", "skill": "技能", "map": "地圖",
 }
 
-# Which fields are allowed for add / update per type.
-_ADD_REQUIRED: dict[str, list[str]] = {
-    "任務": ["id", "敘述", "進度"],
-    "NPC":  ["id", "名稱", "身分", "性格", "關係", "目標"],
-    "技能": ["id", "名稱", "效果"],
-    "裝備": ["id", "名稱", "用途"],
-    "道具": ["id", "名稱", "用途", "數量"],
-    "地圖": ["id", "名稱", "形容", "路徑"],
-}
-
-_UPDATE_ALLOWED: dict[str, set[str]] = {
-    "玩家": {"地點", "狀態", "身分"},
-    "任務": {"敘述", "進度"},
-    "NPC":  {"身分", "性格", "關係", "目標"},
-    "技能": {"效果"},
-    "道具": {"數量"},
-    "地圖": {"形容", "路徑"},
-}
+# Which fields are required/allowed for add/update per type are centralised in
+# game.validation._Rules.  Do not duplicate them here.
 
 
 def apply_changes(world_folder: Path, changes: list[dict[str, Any]]) -> None:
@@ -97,7 +82,7 @@ def _apply_single(
 
 def _normalise_action(raw: Any) -> str:
     value = str(raw).strip().lower()
-    if value in ("add", "update", "remove"):
+    if value in _Rules.CHANGE_ACTIONS:
         return value
     return ""
 
@@ -129,7 +114,7 @@ def _apply_dict(
     if not isinstance(changes_payload, dict):
         raise ValueError("changes/data must be a dict")
 
-    allowed = _UPDATE_ALLOWED.get(type_name)
+    allowed = _Rules.UPDATE_ALLOWED.get(type_name)
     if allowed:
         changes_payload = {k: v for k, v in changes_payload.items() if k in allowed}
 
@@ -205,7 +190,7 @@ def _do_add(
     new_obj["id"] = entry_id
 
     # Fill missing required fields with empty defaults.
-    required = _ADD_REQUIRED.get(type_name, [])
+    required = _Rules.ADD_REQUIRED.get(type_name, [])
     for field in required:
         if field not in new_obj:
             new_obj[field] = 0 if field == "數量" else ""
@@ -225,7 +210,7 @@ def _do_update(
     if not isinstance(changes_payload, dict):
         raise ValueError("changes must be a dict for update")
 
-    allowed = _UPDATE_ALLOWED.get(type_name)
+    allowed = _Rules.UPDATE_ALLOWED.get(type_name)
     if allowed:
         changes_payload = {k: v for k, v in changes_payload.items() if k in allowed}
 

@@ -1,5 +1,5 @@
 from PySide6.QtCore import QSettings, Qt, Signal
-from PySide6.QtWidgets import QLineEdit, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
 from qfluentwidgets import (
     ConfigItem,
     ExpandGroupSettingCard,
@@ -9,7 +9,6 @@ from qfluentwidgets import (
     LineEdit,
     MessageBox,
     OptionsConfigItem,
-    ComboBoxSettingCard,
     OptionsSettingCard,
     OptionsValidator,
     PushButton,
@@ -19,6 +18,8 @@ from qfluentwidgets import (
     RangeValidator,
     SettingCard,
     SettingCardGroup,
+    SingleDirectionScrollArea,
+    SpinBox,
     Theme,
     setTheme,
 )
@@ -83,12 +84,12 @@ class SettingsPage(QWidget):
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._scroll = QScrollArea(self)
+        self._scroll = SingleDirectionScrollArea(self)
         self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._scroll.setStyleSheet("background: transparent; border: none;")
 
         _container = QWidget()
+        _container.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(_container)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
@@ -124,19 +125,16 @@ class SettingsPage(QWidget):
             placeholder="Enter model name (e.g. grok-3-mini)",
         )
 
-        font_size_options = ["14", "15", "16", "17", "18", "19", "20"]
-        saved_font_size = str(cfg.get("ui", "font_size", "14"))
-        if saved_font_size not in font_size_options:
-            saved_font_size = "14"
-        self.font_size_item = OptionsConfigItem(
-            "App", "FontSize", saved_font_size,
-            OptionsValidator(font_size_options),
+        saved_font_size = int(cfg.get("ui", "font_size", 14))
+        self.font_size_card = SettingCard(
+            FIF.FONT, "Font Size", "Adjust chat font size", group,
         )
-        self.font_size_card = ComboBoxSettingCard(
-            self.font_size_item, FIF.FONT, "Font Size",
-            "Adjust chat font size",
-            font_size_options, group,
-        )
+        self._font_spinbox = SpinBox(self.font_size_card)
+        self._font_spinbox.setRange(10, 32)
+        self._font_spinbox.setValue(saved_font_size)
+        self._font_spinbox.setFixedWidth(160)
+        self.font_size_card.hBoxLayout.addWidget(self._font_spinbox, 0, Qt.AlignmentFlag.AlignRight)
+        self.font_size_card.hBoxLayout.addSpacing(16)
 
         self.reset_story_card = PushSettingCard(
             "Reset", FIF.DELETE, "Reset Story",
@@ -240,13 +238,13 @@ class SettingsPage(QWidget):
                 position=InfoBarPosition.TOP, parent=self.window(),
             )
 
-        def apply_font_size(value: str) -> None:
+        def apply_font_size(value: int) -> None:
             AppConfig.instance().set("ui", "font_size", value)
-            self.font_size_changed.emit(int(value))
+            self.font_size_changed.emit(value)
 
         self.theme_mode_item.valueChanged.connect(apply_theme_mode)
         self.window_opacity_item.valueChanged.connect(apply_window_opacity)
-        self.font_size_item.valueChanged.connect(apply_font_size)
+        self._font_spinbox.valueChanged.connect(apply_font_size)
         self.api_key_card.save_button.clicked.connect(save_api_key)
         self.api_base_url_card.save_button.clicked.connect(save_api_base_url)
         self.api_model_card.save_button.clicked.connect(save_api_model)
