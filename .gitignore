@@ -13,3 +13,5 @@
 !/responses.py
 
 */__pycache__/*
+*.pyc
+
