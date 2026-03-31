@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtCore import Signal
 from qfluentwidgets import DotInfoBadge, FluentIcon as FIF, FluentWindow, InfoBadgePosition, NavigationItemPosition
 
+from version import __version__
 from ui.chat_page import SectionsPage
 from ui.library_page import LibraryPage
 from ui.settings_page import SettingsPage
@@ -17,7 +18,7 @@ class MainWindow(FluentWindow):
     def __init__(self, base_path: Path | None = None) -> None:
         super().__init__()
         self._base_path = base_path or Path.cwd()
-        self.setWindowTitle("Akashic")
+        self.setWindowTitle(f"Akashic v{__version__}")
         self.setWindowIcon(FIF.CHAT.icon())
         self.resize(900, 600)
         self._build_ui()
