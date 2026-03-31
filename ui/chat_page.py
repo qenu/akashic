@@ -112,8 +112,8 @@ class SectionsPage(QWidget):
         )
         self._apply_word_count_style(force=True)
 
-        options_row.layout().addStretch(1)
-        options_row.layout().addWidget(self.word_count_label)
+        self.options_layout.addStretch(1)
+        self.options_layout.addWidget(self.word_count_label)
 
         layout.addWidget(chat_label)
         layout.addWidget(self.chat_area, 1)
@@ -124,7 +124,8 @@ class SectionsPage(QWidget):
 
     def _build_option_buttons(self) -> QWidget:
         container = QWidget()
-        button_layout = QHBoxLayout(container)
+        self.options_layout = QHBoxLayout(container)
+        button_layout = self.options_layout
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(8)
 
