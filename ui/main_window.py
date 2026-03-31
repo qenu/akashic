@@ -1,15 +1,18 @@
 from pathlib import Path
 
 from PySide6.QtCore import Signal
-from qfluentwidgets import DotInfoBadge, FluentIcon as FIF, FluentWindow, InfoBadgePosition, NavigationItemPosition
+from qfluentwidgets import DotInfoBadge
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (FluentWindow, InfoBadgePosition,
+                            NavigationItemPosition)
 
-from version import __version__
 from ui.chat_page import SectionsPage
-from ui.library_page import LibraryPage
-from ui.settings_page import SettingsPage
-from ui.quest_page import QuestPage
-from ui.item_page import ItemPage
 from ui.equipment_page import EquipmentPage
+from ui.item_page import ItemPage
+from ui.library_page import LibraryPage
+from ui.quest_page import QuestPage
+from ui.settings_page import SettingsPage
+from version import __version__
 
 
 class MainWindow(FluentWindow):
@@ -33,23 +36,33 @@ class MainWindow(FluentWindow):
 
         self.addSubInterface(sections_page, FIF.CHAT, "Chat Area")
         self.addSubInterface(
-            library_page, FIF.FOLDER, "Library",
+            library_page,
+            FIF.FOLDER,
+            "Library",
             position=NavigationItemPosition.SCROLL,
         )
         self.addSubInterface(
-            quest_page, FIF.BOOK_SHELF, "Quest",
+            quest_page,
+            FIF.BOOK_SHELF,
+            "Quest",
             position=NavigationItemPosition.SCROLL,
         )
         self.addSubInterface(
-            item_page, FIF.SHOPPING_CART, "Item",
+            item_page,
+            FIF.SHOPPING_CART,
+            "Item",
             position=NavigationItemPosition.SCROLL,
         )
         self.addSubInterface(
-            equipment_page, FIF.GAME, "Equipment",
+            equipment_page,
+            FIF.GAME,
+            "Equipment",
             position=NavigationItemPosition.SCROLL,
         )
         self.addSubInterface(
-            settings_page, FIF.SETTING, "Settings",
+            settings_page,
+            FIF.SETTING,
+            "Settings",
             position=NavigationItemPosition.BOTTOM,
         )
 

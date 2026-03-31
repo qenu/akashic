@@ -13,8 +13,8 @@
 !/responses.py
 !/README.md
 !/LICENSE
+!/version.py
 
 */__pycache__/*
 *.pyc
 
-ui/__pycache__/chat_page.cpython-312.pyc

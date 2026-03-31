@@ -1,24 +1,11 @@
-from PySide6.QtCore import QEvent, QTimer, Qt, Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
-from qfluentwidgets import (
-    BodyLabel,
-    FluentIcon as FIF,
-    InfoBar,
-    InfoBarPosition,
-    isDarkTheme,
-    PushButton,
-    qconfig,
-    SimpleCardWidget,
-    SingleDirectionScrollArea,
-    TransparentToolButton,
-)
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtWidgets import (QHBoxLayout, QLabel, QLineEdit, QSizePolicy,
+                               QVBoxLayout, QWidget)
+from qfluentwidgets import BodyLabel
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (InfoBar, InfoBarPosition, PushButton,
+                            SimpleCardWidget, SingleDirectionScrollArea,
+                            TransparentToolButton, isDarkTheme, qconfig)
 
 from app_config import AppConfig
 
@@ -154,7 +141,9 @@ class SectionsPage(QWidget):
             self.option_buttons.append(button)
 
         self.skill_button = PushButton("使用技能")
-        self.skill_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.skill_button.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+        )
         button_layout.addWidget(self.skill_button)
 
         return container
@@ -352,7 +341,13 @@ class SectionsPage(QWidget):
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, user_container)
         self._request_scroll_to_bottom()
 
-    def _add_assistant_message(self, text: str, status_line: str = "", changes_text: str = "", options: list[str] | None = None) -> None:
+    def _add_assistant_message(
+        self,
+        text: str,
+        status_line: str = "",
+        changes_text: str = "",
+        options: list[str] | None = None,
+    ) -> None:
         bubble = SimpleCardWidget()
         bubble_layout = QVBoxLayout(bubble)
         bubble_layout.setContentsMargins(12, 10, 12, 10)
@@ -365,11 +360,21 @@ class SectionsPage(QWidget):
         if options:
             option_lines = [f"{i}. {opt}" for i, opt in enumerate(options, start=1)]
             options_text = "你決定...\n" + "\n".join(option_lines)
-            bubble_layout.addWidget(self._create_message_label(options_text, is_user=False))
+            bubble_layout.addWidget(
+                self._create_message_label(options_text, is_user=False)
+            )
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, bubble)
         self._request_scroll_to_bottom()
 
-    def start_stream(self, text: str, *, status_line: str = "", changes_text: str = "", options: list[str] | None = None, on_done=None) -> None:
+    def start_stream(
+        self,
+        text: str,
+        *,
+        status_line: str = "",
+        changes_text: str = "",
+        options: list[str] | None = None,
+        on_done=None,
+    ) -> None:
         self._stream_timer.stop()
         self._thinking_timer.stop()
         self.thinking_label.clear()
@@ -427,7 +432,9 @@ class SectionsPage(QWidget):
             self._stream_char_idx = 0
 
     def _is_near_bottom(self) -> bool:
-        return (self._scrollbar.maximum() - self._scrollbar.value()) <= self._bottom_threshold
+        return (
+            self._scrollbar.maximum() - self._scrollbar.value()
+        ) <= self._bottom_threshold
 
     def _request_scroll_to_bottom(self) -> None:
         if self._auto_scroll_enabled:
@@ -505,7 +512,9 @@ class SectionsPage(QWidget):
         self.word_count_label.setText(f"{count}/{self._max_chars} chars")
 
     def _refresh_send_enabled(self) -> None:
-        self.send_button.setEnabled((not self._is_waiting) and (not self._over_word_limit))
+        self.send_button.setEnabled(
+            (not self._is_waiting) and (not self._over_word_limit)
+        )
 
     def _refresh_option_buttons_enabled(self) -> None:
         enabled = (not self._is_waiting) and self._options_available
@@ -535,7 +544,9 @@ class SectionsPage(QWidget):
         if self._is_waiting:
             return  # thinking takes priority over compressing label
         self.thinking_label.setText(self._compressing_frames[self._compressing_index])
-        self._compressing_index = (self._compressing_index + 1) % len(self._compressing_frames)
+        self._compressing_index = (self._compressing_index + 1) % len(
+            self._compressing_frames
+        )
 
     def set_compressing(self, is_compressing: bool) -> None:
         """Show or hide the 壓縮中. indicator without blocking input."""
@@ -581,7 +592,14 @@ class SectionsPage(QWidget):
     def _on_assistant_message(self, assistant_text: str) -> None:
         self._add_assistant_message(assistant_text)
 
-    def add_history_message(self, *, text: str, is_user: bool, status_line: str = "", options: list[str] | None = None) -> None:
+    def add_history_message(
+        self,
+        *,
+        text: str,
+        is_user: bool,
+        status_line: str = "",
+        options: list[str] | None = None,
+    ) -> None:
         if is_user:
             self._add_user_text_message(text)
         else:

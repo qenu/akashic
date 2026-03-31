@@ -94,7 +94,11 @@ def append_summary(world_folder: Path, text: str) -> None:
     if not cleaned:
         return
     summary_path = world_folder / "summary.md"
-    existing = summary_path.read_text(encoding="utf-8").rstrip() if summary_path.exists() else ""
+    existing = (
+        summary_path.read_text(encoding="utf-8").rstrip()
+        if summary_path.exists()
+        else ""
+    )
     separator = "\n\n" if existing else ""
     summary_path.write_text(existing + separator + cleaned + "\n", encoding="utf-8")
 
@@ -128,9 +132,7 @@ def append_novel(world_folder: Path, text: str) -> None:
     if novel_path.exists():
         existing = novel_path.read_text(encoding="utf-8").rstrip()
     separator = "\n\n" if existing else ""
-    novel_path.write_text(
-        existing + separator + cleaned + "\n", encoding="utf-8"
-    )
+    novel_path.write_text(existing + separator + cleaned + "\n", encoding="utf-8")
 
 
 def archive_and_remove_world(base_path: Path, world_folder: Path) -> None:
@@ -229,14 +231,17 @@ def export_init_world_files(base_path: Path, assistant_text: str) -> Path | None
         "summary.md": "",
         "worldview.json": json.dumps(
             {"標題": world_data.world_title, "背景": world_data.background_story},
-            ensure_ascii=False, indent=2,
+            ensure_ascii=False,
+            indent=2,
         ),
         "quest.json": json.dumps(world_data.quest_data, ensure_ascii=False, indent=2),
         "map.json": json.dumps(world_data.map_data, ensure_ascii=False, indent=2),
         "player.json": json.dumps(world_data.player_data, ensure_ascii=False, indent=2),
         "npc.json": json.dumps(world_data.npc_data, ensure_ascii=False, indent=2),
         "skill.json": json.dumps(world_data.skill_data, ensure_ascii=False, indent=2),
-        "equipment.json": json.dumps(world_data.equipment_data, ensure_ascii=False, indent=2),
+        "equipment.json": json.dumps(
+            world_data.equipment_data, ensure_ascii=False, indent=2
+        ),
         "item.json": json.dumps(world_data.item_data, ensure_ascii=False, indent=2),
     }
     for name, content in files.items():

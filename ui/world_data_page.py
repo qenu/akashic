@@ -4,15 +4,12 @@ import json
 from abc import abstractmethod
 from pathlib import Path
 
-from PySide6.QtGui import QShowEvent, QHideEvent
+from PySide6.QtGui import QHideEvent, QShowEvent
 from PySide6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import (
-    SimpleCardWidget,
-    SingleDirectionScrollArea,
-    TitleLabel,
-)
+from qfluentwidgets import (SimpleCardWidget, SingleDirectionScrollArea,
+                            TitleLabel)
 
-from game.world_io import resolve_latest_world_folder, read_world_json
+from game.world_io import read_world_json, resolve_latest_world_folder
 
 
 class WorldDataPage(QWidget):
@@ -114,8 +111,7 @@ class WorldDataPage(QWidget):
                 self.content_layout.insertWidget(self.content_layout.count() - 1, card)
 
     @abstractmethod
-    def _build_card(self, entry: dict) -> SimpleCardWidget:
-        ...
+    def _build_card(self, entry: dict) -> SimpleCardWidget: ...
 
     def _remove_entry(self, entry: dict) -> None:
         self._entries = [e for e in self._entries if e is not entry]

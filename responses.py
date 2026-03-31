@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 
 from xai_sdk import Client
 from xai_sdk.chat import assistant, system, user
-from app_logger import AppLogger
 
+from app_logger import AppLogger
 
 log = AppLogger.get_logger("api")
 
@@ -16,7 +16,14 @@ class APIError(Exception):
     """Raised when the API request fails or returns an invalid response."""
 
 
-_TRANSIENT_MARKERS = ("502", "503", "unavailable", "deadline exceeded", "resource exhausted")
+_TRANSIENT_MARKERS = (
+    "502",
+    "503",
+    "unavailable",
+    "deadline exceeded",
+    "resource exhausted",
+)
+
 
 def _is_transient(exc: BaseException) -> bool:
     msg = str(exc).lower()
@@ -69,7 +76,11 @@ class ResponseClient:
     @staticmethod
     def _log_input(messages: list[dict[str, str]]) -> None:
         user_content = next(
-            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+            (
+                m.get("content", "")
+                for m in reversed(messages)
+                if m.get("role") == "user"
+            ),
             "(no user message)",
         )
         log.info("API input — user: {}", user_content)
@@ -82,13 +93,23 @@ class ResponseClient:
             payload = {}
         summary = payload.get("摘要") or payload.get("summary", "")
         changes = payload.get("changes", [])
-        log.info("API output — summary: {} | changes: {}", summary, json.dumps(changes, ensure_ascii=False))
+        log.info(
+            "API output — summary: {} | changes: {}",
+            summary,
+            json.dumps(changes, ensure_ascii=False),
+        )
 
-    def send_messages(self, messages: list[dict[str, str]], *, reasoning: bool = False) -> str:
+    def send_messages(
+        self, messages: list[dict[str, str]], *, reasoning: bool = False
+    ) -> str:
         self._log_input(messages)
         sdk_messages = self._to_sdk_messages(messages)
 
-        model = (self._config.reasoning_model or self._config.model) if reasoning else self._config.model
+        model = (
+            (self._config.reasoning_model or self._config.model)
+            if reasoning
+            else self._config.model
+        )
 
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
@@ -123,7 +144,13 @@ class ResponseClient:
             except Exception as exc:
                 if _is_transient(exc) and attempt < max_attempts:
                     delay = 2 ** (attempt - 1)  # 1s, 2s
-                    log.warning("Transient API error (attempt {}/{}), retrying in {}s: {}", attempt, max_attempts, delay, exc)
+                    log.warning(
+                        "Transient API error (attempt {}/{}), retrying in {}s: {}",
+                        attempt,
+                        max_attempts,
+                        delay,
+                        exc,
+                    )
                     time.sleep(delay)
                     continue
                 log.exception("API call failed")
@@ -160,8 +187,12 @@ class ResponseClient:
         finally:
             client.close()
 
-    def send_chat(self, user_text: str, system_prompt: str = "You are a helpful assistant.") -> str:
-        return self.send_messages([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_text},
-        ])
+    def send_chat(
+        self, user_text: str, system_prompt: str = "You are a helpful assistant."
+    ) -> str:
+        return self.send_messages(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text},
+            ]
+        )

@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from game.parsing import (NARRATIVE_KEYS, OPTION_KEYS, extract_json,
+                          pick_first_text, pick_options)
 from game.records import ChatRecord
-from game.world_io import read_world_json, read_summary
-from game.parsing import extract_json, NARRATIVE_KEYS, OPTION_KEYS, pick_first_text, pick_options
+from game.world_io import read_summary, read_world_json
 
 
 def build_runtime_context(
@@ -126,7 +127,6 @@ def _build_reference_scan_text(records: list[ChatRecord]) -> str:
     return "\n".join(chunks).lower()
 
 
-
 def _extract_entry_name(entry: Any) -> str:
     if isinstance(entry, dict):
         for key in ("名稱", "name", "標題", "title"):
@@ -138,9 +138,7 @@ def _extract_entry_name(entry: Any) -> str:
     return ""
 
 
-def _select_named_entries_by_reference(
-    entries: Any, mention_text: str
-) -> list[Any]:
+def _select_named_entries_by_reference(entries: Any, mention_text: str) -> list[Any]:
     if not isinstance(entries, list):
         return []
     selected: list[Any] = []

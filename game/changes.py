@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from app_logger import AppLogger
-from game.world_io import read_world_json
 from game.validation import _Rules
+from game.world_io import read_world_json
 
 log = AppLogger.get_logger("changes")
 
@@ -14,19 +14,31 @@ log = AppLogger.get_logger("changes")
 # "dict" means the file is a single object (player.json).
 # "list" means the file is an array of objects keyed by "id".
 _TYPE_MAP: dict[str, tuple[str, str]] = {
-    "玩家": ("player.json", "dict"),  "player": ("player.json", "dict"),
-    "任務": ("quest.json", "list"),   "quest":  ("quest.json", "list"),
-    "NPC":  ("npc.json", "list"),     "npc":    ("npc.json", "list"),
-    "道具": ("item.json", "list"),    "item":   ("item.json", "list"),
-    "裝備": ("equipment.json", "list"), "equipment": ("equipment.json", "list"),
-    "技能": ("skill.json", "list"),   "skill":  ("skill.json", "list"),
-    "地圖": ("map.json", "list"),     "map":    ("map.json", "list"),
+    "玩家": ("player.json", "dict"),
+    "player": ("player.json", "dict"),
+    "任務": ("quest.json", "list"),
+    "quest": ("quest.json", "list"),
+    "NPC": ("npc.json", "list"),
+    "npc": ("npc.json", "list"),
+    "道具": ("item.json", "list"),
+    "item": ("item.json", "list"),
+    "裝備": ("equipment.json", "list"),
+    "equipment": ("equipment.json", "list"),
+    "技能": ("skill.json", "list"),
+    "skill": ("skill.json", "list"),
+    "地圖": ("map.json", "list"),
+    "map": ("map.json", "list"),
 }
 
 # Maps English aliases back to the canonical Chinese key used in _ADD_REQUIRED / _UPDATE_ALLOWED.
 _CANONICAL_TYPE: dict[str, str] = {
-    "player": "玩家", "quest": "任務", "npc": "NPC",
-    "item": "道具", "equipment": "裝備", "skill": "技能", "map": "地圖",
+    "player": "玩家",
+    "quest": "任務",
+    "npc": "NPC",
+    "item": "道具",
+    "equipment": "裝備",
+    "skill": "技能",
+    "map": "地圖",
 }
 
 # Which fields are required/allowed for add/update per type are centralised in
@@ -72,12 +84,16 @@ def _apply_single(
     file_name, kind = _TYPE_MAP[type_name]
 
     if action == "update" and entry_id in removed_ids:
-        raise ValueError(f"cannot update '{entry_id}' after removing it in the same turn")
+        raise ValueError(
+            f"cannot update '{entry_id}' after removing it in the same turn"
+        )
 
     if kind == "dict":
         _apply_dict(world_folder, file_name, type_name, action, entry_id, entry)
     else:
-        _apply_list(world_folder, file_name, type_name, action, entry_id, entry, removed_ids)
+        _apply_list(
+            world_folder, file_name, type_name, action, entry_id, entry, removed_ids
+        )
 
 
 def _normalise_action(raw: Any) -> str:
@@ -90,6 +106,7 @@ def _normalise_action(raw: Any) -> str:
 # ------------------------------------------------------------------
 # Dict-type file (player.json)
 # ------------------------------------------------------------------
+
 
 def _apply_dict(
     world_folder: Path,
@@ -122,7 +139,11 @@ def _apply_dict(
 
     # Deep-merge status fields.
     for key, value in changes_payload.items():
-        if key == "狀態" and isinstance(value, dict) and isinstance(data.get("狀態"), dict):
+        if (
+            key == "狀態"
+            and isinstance(value, dict)
+            and isinstance(data.get("狀態"), dict)
+        ):
             data["狀態"].update(value)
             _clamp_negatives(data["狀態"])
         else:
@@ -135,6 +156,7 @@ def _apply_dict(
 # ------------------------------------------------------------------
 # List-type files (quest, npc, item, etc.)
 # ------------------------------------------------------------------
+
 
 def _apply_list(
     world_folder: Path,
@@ -153,14 +175,22 @@ def _apply_list(
 
     if action == "add":
         if existing_idx is not None:
-            log.warning("ID '{}' already exists in {}; treating add as update", entry_id, file_name)
+            log.warning(
+                "ID '{}' already exists in {}; treating add as update",
+                entry_id,
+                file_name,
+            )
             _do_update(data, existing_idx, type_name, entry)
         else:
             _do_add(data, type_name, entry_id, entry)
 
     elif action == "update":
         if existing_idx is None:
-            log.warning("ID '{}' not found in {} for update; treating as add", entry_id, file_name)
+            log.warning(
+                "ID '{}' not found in {} for update; treating as add",
+                entry_id,
+                file_name,
+            )
             _do_add(data, type_name, entry_id, entry)
         else:
             _do_update(data, existing_idx, type_name, entry)
@@ -170,14 +200,18 @@ def _apply_list(
                 if isinstance(updated, dict) and int(updated.get("數量", -1)) == 0:
                     data.pop(existing_idx)
                     removed_ids.add(entry_id)
-                    log.info("Auto-removed {} id='{}' (數量 reached 0)", type_name, entry_id)
+                    log.info(
+                        "Auto-removed {} id='{}' (數量 reached 0)", type_name, entry_id
+                    )
 
     elif action == "remove":
         if existing_idx is not None:
             data.pop(existing_idx)
             removed_ids.add(entry_id)
         else:
-            log.warning("ID '{}' not found in {} for remove; ignoring", entry_id, file_name)
+            log.warning(
+                "ID '{}' not found in {} for remove; ignoring", entry_id, file_name
+            )
             return
 
     _write_json(world_folder, file_name, data)
@@ -232,6 +266,7 @@ def _do_update(
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _find_by_id(data: list[Any], entry_id: str) -> int | None:
     for i, item in enumerate(data):

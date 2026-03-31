@@ -3,43 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QVBoxLayout,
-    QWidget,
-)
-from qfluentwidgets import (
-    BodyLabel,
-    CaptionLabel,
-    CardWidget,
-    CheckBox,
-    ComboBox,
-    FluentIcon as FIF,
-    IndeterminateProgressBar,
-    InfoBar,
-    InfoBarPosition,
-    LineEdit,
-    ListWidget,
-    PillPushButton,
-    PrimaryPushButton,
-    ProgressBar,
-    PushButton,
-    RadioButton,
-    SearchLineEdit,
-    SimpleCardWidget,
-    SingleDirectionScrollArea,
-    Slider,
-    SpinBox,
-    StrongBodyLabel,
-    SubtitleLabel,
-    SwitchButton,
-    TextEdit,
-    TitleLabel,
-    ToggleButton,
-    ToolButton,
-    TransparentPushButton,
-    TransparentToolButton,
-)
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from qfluentwidgets import (BodyLabel, CaptionLabel, CardWidget, CheckBox,
+                            ComboBox)
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (IndeterminateProgressBar, InfoBar, InfoBarPosition,
+                            LineEdit, ListWidget, PillPushButton,
+                            PrimaryPushButton, ProgressBar, PushButton,
+                            RadioButton, SearchLineEdit, SimpleCardWidget,
+                            SingleDirectionScrollArea, Slider, SpinBox,
+                            StrongBodyLabel, SubtitleLabel, SwitchButton,
+                            TextEdit, TitleLabel, ToggleButton, ToolButton,
+                            TransparentPushButton, TransparentToolButton)
 
 from game.world_io import resolve_latest_world_folder
 
@@ -235,14 +210,38 @@ class LibraryPage(QWidget):
         btn_warning = PushButton("InfoBar — Warning")
         btn_error = PushButton("InfoBar — Error")
 
-        btn_info.clicked.connect(lambda: InfoBar.info(
-            "Info", "This is an info bar.", parent=self, position=InfoBarPosition.TOP))
-        btn_success.clicked.connect(lambda: InfoBar.success(
-            "Success", "Operation completed.", parent=self, position=InfoBarPosition.TOP))
-        btn_warning.clicked.connect(lambda: InfoBar.warning(
-            "Warning", "Something looks off.", parent=self, position=InfoBarPosition.TOP))
-        btn_error.clicked.connect(lambda: InfoBar.error(
-            "Error", "Something went wrong.", parent=self, position=InfoBarPosition.TOP))
+        btn_info.clicked.connect(
+            lambda: InfoBar.info(
+                "Info",
+                "This is an info bar.",
+                parent=self,
+                position=InfoBarPosition.TOP,
+            )
+        )
+        btn_success.clicked.connect(
+            lambda: InfoBar.success(
+                "Success",
+                "Operation completed.",
+                parent=self,
+                position=InfoBarPosition.TOP,
+            )
+        )
+        btn_warning.clicked.connect(
+            lambda: InfoBar.warning(
+                "Warning",
+                "Something looks off.",
+                parent=self,
+                position=InfoBarPosition.TOP,
+            )
+        )
+        btn_error.clicked.connect(
+            lambda: InfoBar.error(
+                "Error",
+                "Something went wrong.",
+                parent=self,
+                position=InfoBarPosition.TOP,
+            )
+        )
 
         return _section(
             "InfoBar",

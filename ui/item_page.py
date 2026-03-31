@@ -5,16 +5,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
-from qfluentwidgets import (
-    BodyLabel,
-    CaptionLabel,
-    FluentIcon as FIF,
-    MessageBox,
-    PushButton,
-    SimpleCardWidget,
-    SubtitleLabel,
-    ToolButton,
-)
+from qfluentwidgets import BodyLabel, CaptionLabel
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (MessageBox, PushButton, SimpleCardWidget,
+                            SubtitleLabel, ToolButton)
 
 from ui.world_data_page import WorldDataPage
 

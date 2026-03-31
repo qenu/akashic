@@ -4,14 +4,8 @@ from pathlib import Path
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
-from qfluentwidgets import (
-    BodyLabel,
-    CaptionLabel,
-    MessageBox,
-    PushButton,
-    SimpleCardWidget,
-    SubtitleLabel,
-)
+from qfluentwidgets import (BodyLabel, CaptionLabel, MessageBox, PushButton,
+                            SimpleCardWidget, SubtitleLabel)
 
 from ui.world_data_page import WorldDataPage
 

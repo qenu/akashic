@@ -17,6 +17,7 @@ class ValidationResult:
 # Shared low-level checks
 # ---------------------------------------------------------------------------
 
+
 class _Rules:
     EQUIPMENT_CLASSES = {"武器", "防具", "飾品"}
     CHANGE_ACTIONS = {"add", "update", "remove"}
@@ -25,7 +26,7 @@ class _Rules:
     # Fields required when adding each type via a change entry.
     ADD_REQUIRED: dict[str, list[str]] = {
         "任務": ["id", "敘述", "進度"],
-        "NPC":  ["id", "名稱", "身分", "性格", "關係", "目標"],
+        "NPC": ["id", "名稱", "身分", "性格", "關係", "目標"],
         "技能": ["id", "名稱", "效果"],
         "裝備": ["id", "名稱", "分類", "用途"],
         "道具": ["id", "名稱", "用途", "數量"],
@@ -36,7 +37,7 @@ class _Rules:
     UPDATE_ALLOWED: dict[str, set[str]] = {
         "玩家": {"地點", "狀態", "身分"},
         "任務": {"敘述", "進度"},
-        "NPC":  {"身分", "性格", "關係", "目標"},
+        "NPC": {"身分", "性格", "關係", "目標"},
         "技能": {"效果"},
         "裝備": {"用途"},
         "道具": {"數量"},
@@ -70,7 +71,9 @@ class _Rules:
             errors.append(f"{label} must be a non-empty string")
             return False
         if not all(c.isalnum() or c == "_" for c in value):
-            errors.append(f"{label} must be snake_case (letters, digits, underscores only)")
+            errors.append(
+                f"{label} must be snake_case (letters, digits, underscores only)"
+            )
             return False
         return True
 
@@ -78,6 +81,7 @@ class _Rules:
 # ---------------------------------------------------------------------------
 # Init payload validator  (init.md JSON structure)
 # ---------------------------------------------------------------------------
+
 
 class InitPayloadValidator:
     """Validates the full world-creation JSON produced by init.md."""
@@ -98,7 +102,9 @@ class InitPayloadValidator:
         errors: list[str] = []
 
         if not isinstance(payload, dict):
-            return ValidationResult(valid=False, errors=["Payload must be a JSON object"])
+            return ValidationResult(
+                valid=False, errors=["Payload must be a JSON object"]
+            )
 
         self._check_worldview(payload.get("世界觀"), errors)
         map_ids = self._check_map(payload.get("地圖"), errors)
@@ -126,7 +132,9 @@ class InitPayloadValidator:
             return ids
         count = len(maps)
         if not (self.MIN_MAP <= count <= self.MAX_MAP):
-            errors.append(f"地圖 must have {self.MIN_MAP}–{self.MAX_MAP} entries, got {count}")
+            errors.append(
+                f"地圖 must have {self.MIN_MAP}–{self.MAX_MAP} entries, got {count}"
+            )
         for i, entry in enumerate(maps):
             if not isinstance(entry, dict):
                 errors.append(f"地圖[{i}] must be an object")
@@ -164,7 +172,9 @@ class InitPayloadValidator:
                 if isinstance(val, str):
                     parts = val.split("/")
                     if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
-                        errors.append(f"玩家.狀態.{stat} has invalid format '{val}'; expected int or 'n/n'")
+                        errors.append(
+                            f"玩家.狀態.{stat} has invalid format '{val}'; expected int or 'n/n'"
+                        )
                 elif not isinstance(val, (int, float)) or val < 0:
                     errors.append(f"玩家.狀態.{stat} must be a non-negative number")
 
@@ -176,7 +186,9 @@ class InitPayloadValidator:
             return
         count = len(npcs)
         if not (self.MIN_NPC <= count <= self.MAX_NPC):
-            errors.append(f"NPC must have {self.MIN_NPC}–{self.MAX_NPC} entries, got {count}")
+            errors.append(
+                f"NPC must have {self.MIN_NPC}–{self.MAX_NPC} entries, got {count}"
+            )
         ids: set[str] = set()
         for i, npc in enumerate(npcs):
             if not isinstance(npc, dict):
@@ -202,7 +214,9 @@ class InitPayloadValidator:
             return
         count = len(skills)
         if not (self.MIN_SKILLS <= count <= self.MAX_SKILLS):
-            errors.append(f"技能 must have {self.MIN_SKILLS}–{self.MAX_SKILLS} entries, got {count}")
+            errors.append(
+                f"技能 must have {self.MIN_SKILLS}–{self.MAX_SKILLS} entries, got {count}"
+            )
         ids: set[str] = set()
         for i, skill in enumerate(skills):
             if not isinstance(skill, dict):
@@ -223,7 +237,9 @@ class InitPayloadValidator:
             return
         count = len(equipment)
         if not (self.MIN_EQUIPMENT <= count <= self.MAX_EQUIPMENT):
-            errors.append(f"裝備 must have {self.MIN_EQUIPMENT}–{self.MAX_EQUIPMENT} entries, got {count}")
+            errors.append(
+                f"裝備 must have {self.MIN_EQUIPMENT}–{self.MAX_EQUIPMENT} entries, got {count}"
+            )
         ids: set[str] = set()
         classes_seen: set[str] = set()
         for i, eq in enumerate(equipment):
@@ -241,9 +257,13 @@ class InitPayloadValidator:
             _Rules.check_non_empty_string(eq.get("用途"), f"{label}.用途", errors)
             cls = eq.get("分類")
             if cls not in _Rules.EQUIPMENT_CLASSES:
-                errors.append(f"{label}.分類 must be one of {_Rules.EQUIPMENT_CLASSES}, got '{cls}'")
+                errors.append(
+                    f"{label}.分類 must be one of {_Rules.EQUIPMENT_CLASSES}, got '{cls}'"
+                )
             elif cls in classes_seen:
-                errors.append(f"{label}.分類 '{cls}' duplicates an existing equipment class")
+                errors.append(
+                    f"{label}.分類 '{cls}' duplicates an existing equipment class"
+                )
             else:
                 classes_seen.add(cls)
 
@@ -252,7 +272,9 @@ class InitPayloadValidator:
             return
         count = len(items)
         if not (self.MIN_ITEMS <= count <= self.MAX_ITEMS):
-            errors.append(f"道具 must have {self.MIN_ITEMS}–{self.MAX_ITEMS} entries, got {count}")
+            errors.append(
+                f"道具 must have {self.MIN_ITEMS}–{self.MAX_ITEMS} entries, got {count}"
+            )
         ids: set[str] = set()
         for i, item in enumerate(items):
             if not isinstance(item, dict):
@@ -271,12 +293,15 @@ class InitPayloadValidator:
             if not isinstance(qty, int) or qty < 0:
                 errors.append(f"{label}.數量 must be a non-negative integer")
             elif qty > self.MAX_ITEM_QUANTITY:
-                errors.append(f"{label}.數量 must not exceed {self.MAX_ITEM_QUANTITY}, got {qty}")
+                errors.append(
+                    f"{label}.數量 must not exceed {self.MAX_ITEM_QUANTITY}, got {qty}"
+                )
 
 
 # ---------------------------------------------------------------------------
 # Change entry validator  (system.md changes protocol)
 # ---------------------------------------------------------------------------
+
 
 class ChangeEntryValidator:
     """Validates a single change entry from the assistant's changes array."""
@@ -285,16 +310,22 @@ class ChangeEntryValidator:
         errors: list[str] = []
 
         if not isinstance(entry, dict):
-            return ValidationResult(valid=False, errors=["Change entry must be a JSON object"])
+            return ValidationResult(
+                valid=False, errors=["Change entry must be a JSON object"]
+            )
 
         action = str(entry.get("action", "")).strip().lower()
         raw_type = str(entry.get("type", "")).strip()
         entry_id = str(entry.get("id", "")).strip()
 
         if action not in _Rules.CHANGE_ACTIONS:
-            errors.append(f"action must be one of {_Rules.CHANGE_ACTIONS}, got '{action}'")
+            errors.append(
+                f"action must be one of {_Rules.CHANGE_ACTIONS}, got '{action}'"
+            )
         if raw_type not in _Rules.CHANGE_TYPES:
-            errors.append(f"type must be one of {_Rules.CHANGE_TYPES}, got '{raw_type}'")
+            errors.append(
+                f"type must be one of {_Rules.CHANGE_TYPES}, got '{raw_type}'"
+            )
         _Rules.check_snakecase_id(entry_id, "id", errors)
 
         if errors:
@@ -330,7 +361,9 @@ class ChangeEntryValidator:
                     errors.append(f"data.路徑 must be a list")
             elif f == "分類":
                 if data[f] not in _Rules.EQUIPMENT_CLASSES:
-                    errors.append(f"data.分類 must be one of {_Rules.EQUIPMENT_CLASSES}")
+                    errors.append(
+                        f"data.分類 must be one of {_Rules.EQUIPMENT_CLASSES}"
+                    )
             else:
                 _Rules.check_non_empty_string(data.get(f), f"data.{f}", errors)
 

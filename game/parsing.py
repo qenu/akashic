@@ -106,9 +106,15 @@ def extract_options_from_text(text: str) -> list[str]:
     return [item for item in parsed if item]
 
 
-_CONDENSE_STRIP_KEYS: frozenset[str] = frozenset({
-    "changes", "選項", "options", "actions", "可選行動",
-})
+_CONDENSE_STRIP_KEYS: frozenset[str] = frozenset(
+    {
+        "changes",
+        "選項",
+        "options",
+        "actions",
+        "可選行動",
+    }
+)
 
 
 def condense_assistant_text(assistant_text: str) -> str:
@@ -129,7 +135,15 @@ def condense_assistant_text(assistant_text: str) -> str:
     return json.dumps(condensed, ensure_ascii=False)
 
 
-NARRATIVE_KEYS: list[str] = ["敘事", "narrative", "故事", "內容", "text", "描述", "message"]
+NARRATIVE_KEYS: list[str] = [
+    "敘事",
+    "narrative",
+    "故事",
+    "內容",
+    "text",
+    "描述",
+    "message",
+]
 OPTION_KEYS: list[str] = ["選項", "options", "actions", "可選行動"]
 SUMMARY_KEYS: list[str] = ["摘要", "summary"]
 
@@ -138,16 +152,26 @@ SUMMARY_KEYS: list[str] = ["摘要", "summary"]
 # -----------------------------------------------------------------------
 
 _CHANGE_PRIORITY: dict[str, int] = {
-    "任務": 0, "quest": 0,
-    "裝備": 1, "equipment": 1,
-    "技能": 2, "skill": 2,
-    "道具": 3, "item": 3,
-    "玩家": 4, "player": 4,
+    "任務": 0,
+    "quest": 0,
+    "裝備": 1,
+    "equipment": 1,
+    "技能": 2,
+    "skill": 2,
+    "道具": 3,
+    "item": 3,
+    "玩家": 4,
+    "player": 4,
 }
 
 _CHANGE_CANONICAL: dict[str, str] = {
-    "quest": "任務", "equipment": "裝備", "skill": "技能",
-    "item": "道具", "player": "玩家", "npc": "NPC", "map": "地圖",
+    "quest": "任務",
+    "equipment": "裝備",
+    "skill": "技能",
+    "item": "道具",
+    "player": "玩家",
+    "npc": "NPC",
+    "map": "地圖",
 }
 
 
@@ -178,9 +202,19 @@ def format_changes_lines(
     lines: list[str] = []
     for _, type_name, entry in buckets:
         action = str(entry.get("action", "")).strip().lower()
-        lines.extend(_format_single_change(
-            type_name, action, entry, old_player, new_player, old_items, new_items, map_data, quest_data
-        ))
+        lines.extend(
+            _format_single_change(
+                type_name,
+                action,
+                entry,
+                old_player,
+                new_player,
+                old_items,
+                new_items,
+                map_data,
+                quest_data,
+            )
+        )
     return lines
 
 
@@ -228,7 +262,11 @@ def _format_single_change(
     entry_id = str(entry.get("id", "")).strip()
 
     if type_name == "任務":
-        desc = _get_str(data, "名稱") or _get_str(data, "敘述") or _find_quest_name(entry_id, quest_data)
+        desc = (
+            _get_str(data, "名稱")
+            or _get_str(data, "敘述")
+            or _find_quest_name(entry_id, quest_data)
+        )
         progress = _get_str(data, "進度")
         if action == "add":
             return [f"接受任務 - {desc}"]
@@ -249,14 +287,20 @@ def _format_single_change(
         name = _get_str(data, "名稱") or entry_id
         effect = _get_str(data, "效果")
         if action == "add":
-            return [f"習得技能 - {name}: {effect}"] if effect else [f"習得技能 - {name}"]
+            return (
+                [f"習得技能 - {name}: {effect}"] if effect else [f"習得技能 - {name}"]
+            )
         if action == "update":
-            return [f"技能修正 - {name}: {effect}"] if effect else [f"技能修正 - {name}"]
+            return (
+                [f"技能修正 - {name}: {effect}"] if effect else [f"技能修正 - {name}"]
+            )
 
     elif type_name == "道具":
         name = _get_str(data, "名稱")
         if not name:
-            fallback = _find_item_in_list(old_items, entry_id) or _find_item_in_list(new_items, entry_id)
+            fallback = _find_item_in_list(old_items, entry_id) or _find_item_in_list(
+                new_items, entry_id
+            )
             name = _get_str(fallback, "名稱") or entry_id
         usage = _get_str(data, "用途")
 
@@ -333,8 +377,12 @@ def _format_player_change(
 
     status_changes = changes_data.get("狀態")
     if isinstance(status_changes, dict):
-        old_status = old_p.get("狀態", {}) if isinstance(old_p.get("狀態"), dict) else {}
-        new_status = new_p.get("狀態", {}) if isinstance(new_p.get("狀態"), dict) else {}
+        old_status = (
+            old_p.get("狀態", {}) if isinstance(old_p.get("狀態"), dict) else {}
+        )
+        new_status = (
+            new_p.get("狀態", {}) if isinstance(new_p.get("狀態"), dict) else {}
+        )
         consumable_name = str((old_p or new_p).get("消耗名稱", "")).strip()
         for field, _ in status_changes.items():
             old_val = old_status.get(field, "?")
@@ -347,7 +395,9 @@ def _format_player_change(
     return lines
 
 
-def format_player_status_line(player_data: Any, item_data: Any = None, map_data: Any = None) -> str:
+def format_player_status_line(
+    player_data: Any, item_data: Any = None, map_data: Any = None
+) -> str:
     """Build a one-line player status string from player.json data.
 
     Order: 生命 | 消耗名稱: 消耗 | 飽腹感 | 身分 | 地點
@@ -359,7 +409,9 @@ def format_player_status_line(player_data: Any, item_data: Any = None, map_data:
         return ""
 
     parts: list[str] = []
-    status = player_data.get("狀態", {}) if isinstance(player_data.get("狀態"), dict) else {}
+    status = (
+        player_data.get("狀態", {}) if isinstance(player_data.get("狀態"), dict) else {}
+    )
 
     hp = status.get("生命") if status else player_data.get("生命")
     if hp is not None:
@@ -426,7 +478,11 @@ def assistant_chat_payload(
 
     if "世界觀" in payload:
         worldview = payload.get("世界觀") or {}
-        bg = str(worldview.get("背景", "")).strip() if isinstance(worldview, dict) else ""
+        bg = (
+            str(worldview.get("背景", "")).strip()
+            if isinstance(worldview, dict)
+            else ""
+        )
         return bg or "World builder complete.", "", []
 
     narrative, options = extract_narrative_and_options(payload)

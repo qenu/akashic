@@ -13,25 +13,18 @@ from PySide6.QtWidgets import QApplication
 
 from app_config import AppConfig
 from app_logger import AppLogger
-from responses import APIConfig, APIError, ResponseClient
-from game.records import ChatRecord
-from game.parsing import assistant_chat_payload, extract_json, format_changes_lines, NARRATIVE_KEYS, pick_first_text, SUMMARY_KEYS
-from game.world_io import (
-    resolve_latest_world_folder,
-    is_world_initialized,
-    export_init_world_files,
-    append_novel,
-    append_summary,
-    count_summary_words,
-    read_summary,
-    write_summary,
-    archive_and_remove_world,
-    dump_logs,
-    restore_records_from_logs,
-    read_world_json,
-)
-from game.context import build_runtime_context
 from game.changes import apply_changes
+from game.context import build_runtime_context
+from game.parsing import (NARRATIVE_KEYS, SUMMARY_KEYS, assistant_chat_payload,
+                          extract_json, format_changes_lines, pick_first_text)
+from game.records import ChatRecord
+from game.world_io import (append_novel, append_summary,
+                           archive_and_remove_world, count_summary_words,
+                           dump_logs, export_init_world_files,
+                           is_world_initialized, read_summary, read_world_json,
+                           resolve_latest_world_folder,
+                           restore_records_from_logs, write_summary)
+from responses import APIConfig, APIError, ResponseClient
 
 log = AppLogger.get_logger("state")
 
@@ -62,7 +55,9 @@ class GameStateController(QObject):
         self._last_story_options: list[str] = []
         self._config = AppConfig.instance()
         self._base_path = base_path
-        self._greetings_lines = self._read_prompt_lines("core/template/greetings.md", "Describe a world you want to live in.")
+        self._greetings_lines = self._read_prompt_lines(
+            "core/template/greetings.md", "Describe a world you want to live in."
+        )
         self._core_prompt = self._read_prompt_file("core/system.md", "")
         self._init_prompt = self._read_prompt_file("core/init.md", "")
         self._compression_prompt = self._read_prompt_file("core/compression.md", "")
@@ -73,7 +68,8 @@ class GameStateController(QObject):
         app = QApplication.instance()
         self.app = app if app is not None else QApplication(sys.argv)
 
-        from ui import MainWindow, SectionsPage, LibraryPage, ItemPage, QuestPage, EquipmentPage
+        from ui import (EquipmentPage, ItemPage, LibraryPage, MainWindow,
+                        QuestPage, SectionsPage)
 
         self.window = MainWindow(base_path)
         sections_page = self.window.findChild(SectionsPage, "sectionsPage")
@@ -91,11 +87,15 @@ class GameStateController(QObject):
         if quest_page is not None:
             self.world_data_updated.connect(quest_page.refresh)
 
-        equipment_page: EquipmentPage | None = self.window.findChild(EquipmentPage, "equipmentPage")
+        equipment_page: EquipmentPage | None = self.window.findChild(
+            EquipmentPage, "equipmentPage"
+        )
         if equipment_page is not None:
             self.world_data_updated.connect(equipment_page.refresh)
 
-        self.library_page: LibraryPage | None = self.window.findChild(LibraryPage, "libraryPage")
+        self.library_page: LibraryPage | None = self.window.findChild(
+            LibraryPage, "libraryPage"
+        )
         if self.library_page is not None:
             self.library_page.refresh_from_latest_world(self._base_path)
 
@@ -105,13 +105,17 @@ class GameStateController(QObject):
 
         log.info(
             "Startup state: world_initialized={}, restored_has_options={}, enabling_options={}",
-            world_init, restored_has_options, should_enable_options,
+            world_init,
+            restored_has_options,
+            should_enable_options,
         )
 
         self.sections_page.set_options_available(should_enable_options)
         self.sections_page.user_message_sent.connect(self._on_user_message)
         self.sections_page.skill_button_clicked.connect(self._on_skill_button_clicked)
-        self.sections_page.skill_candidate_selected.connect(self._on_skill_candidate_selected)
+        self.sections_page.skill_candidate_selected.connect(
+            self._on_skill_candidate_selected
+        )
         self.window.reset_story_requested.connect(self.reset_story)
         self.assistant_reply_ready.connect(self._on_async_assistant_reply)
         self.compression_state_changed.connect(self.sections_page.set_compressing)
@@ -135,7 +139,11 @@ class GameStateController(QObject):
         if not file_path.exists():
             log.warning("Prompt file not found: {}", file_path)
             return [fallback]
-        lines = [line.strip() for line in file_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        lines = [
+            line.strip()
+            for line in file_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         return lines if lines else [fallback]
 
     # ------------------------------------------------------------------
@@ -159,7 +167,8 @@ class GameStateController(QObject):
     def _append_summary_entry(self, assistant_text: str) -> None:
         """Extract the summary field from an assistant reply and append it to summary.md.
         Skipped during the opening options turn (system-generated, not player-driven).
-        Triggers background compression when the file exceeds the word-count threshold."""
+        Triggers background compression when the file exceeds the word-count threshold.
+        """
         if self._world_folder_path is None:
             return
         if self._awaiting_opening_options:
@@ -173,9 +182,15 @@ class GameStateController(QObject):
         with self._summary_lock:
             append_summary(self._world_folder_path, summary)
             word_count = count_summary_words(self._world_folder_path)
-        if word_count >= SUMMARY_COMPRESSION_THRESHOLD and not self._compression_in_progress:
+        if (
+            word_count >= SUMMARY_COMPRESSION_THRESHOLD
+            and not self._compression_in_progress
+        ):
             self._compression_in_progress = True
-            log.info("Summary exceeded {} words; scheduling compression", SUMMARY_COMPRESSION_THRESHOLD)
+            log.info(
+                "Summary exceeded {} words; scheduling compression",
+                SUMMARY_COMPRESSION_THRESHOLD,
+            )
             threading.Thread(target=self._compress_summary, daemon=True).start()
 
     def _compress_summary(self) -> None:
@@ -186,7 +201,9 @@ class GameStateController(QObject):
         try:
             self.compression_state_changed.emit(True)
             if client is None or not compression_prompt or world_folder is None:
-                log.warning("Summary compression skipped: missing client, prompt, or world folder")
+                log.warning(
+                    "Summary compression skipped: missing client, prompt, or world folder"
+                )
                 return
             with self._summary_lock:
                 snapshot = read_summary(world_folder)
@@ -203,16 +220,23 @@ class GameStateController(QObject):
                 log.warning("Summary compression returned empty result; skipping")
                 return
             if len(compressed.split()) >= snapshot_words:
-                log.warning("Compression result not shorter ({} >= {}); skipping",
-                            len(compressed.split()), snapshot_words)
+                log.warning(
+                    "Compression result not shorter ({} >= {}); skipping",
+                    len(compressed.split()),
+                    snapshot_words,
+                )
                 return
             with self._summary_lock:
                 # Re-read to catch any entries appended during the API call
                 latest = read_summary(world_folder)
-                tail = latest[len(snapshot):].strip()
+                tail = latest[len(snapshot) :].strip()
                 final = compressed.strip() + ("\n\n" + tail if tail else "")
                 write_summary(world_folder, final)
-            log.info("Summary compressed: {} -> {} words", snapshot_words, len(compressed.split()))
+            log.info(
+                "Summary compressed: {} -> {} words",
+                snapshot_words,
+                len(compressed.split()),
+            )
         except Exception as exc:
             log.warning("Summary compression failed: {}", exc)
         finally:
@@ -241,12 +265,16 @@ class GameStateController(QObject):
     # ------------------------------------------------------------------
 
     def _build_api_client(self) -> ResponseClient | None:
-        api_key = str(QSettings("erikH", "interactive-chat").value("ai/api_key", "", type=str)).strip()
+        api_key = str(
+            QSettings("erikH", "interactive-chat").value("ai/api_key", "", type=str)
+        ).strip()
         if not api_key:
             return None
         base_url = str(self._config.get("ai", "base_url", "api.x.ai")).strip()
         model = str(self._config.get("ai", "model", "grok-3-latest")).strip()
-        reasoning_model = str(self._config.get("ai", "reasoning_model", "grok-3-mini")).strip()
+        reasoning_model = str(
+            self._config.get("ai", "reasoning_model", "grok-3-mini")
+        ).strip()
         config = APIConfig(
             base_url=base_url,
             api_key=api_key,
@@ -282,8 +310,12 @@ class GameStateController(QObject):
             if record.role == "user":
                 self.sections_page.add_history_message(text=record.text, is_user=True)
                 continue
-            narrative, status_line, options = assistant_chat_payload(record.text, player_data, item_data, map_data)
-            self.sections_page.add_history_message(text=narrative, status_line=status_line, options=options, is_user=False)
+            narrative, status_line, options = assistant_chat_payload(
+                record.text, player_data, item_data, map_data
+            )
+            self.sections_page.add_history_message(
+                text=narrative, status_line=status_line, options=options, is_user=False
+            )
             if options:
                 last_options = options
 
@@ -291,7 +323,8 @@ class GameStateController(QObject):
         self.sections_page.set_option_candidates(last_options)
         log.info(
             "Restored chat UI with {} messages; last options available: {}",
-            len(self.records), bool(last_options),
+            len(self.records),
+            bool(last_options),
         )
         return bool(last_options)
 
@@ -316,7 +349,9 @@ class GameStateController(QObject):
 
     def _on_user_message(self, text: str) -> None:
         log.info("Received user message")
-        self.records.append(ChatRecord(role="user", text=text, timestamp_utc=self._now_iso()))
+        self.records.append(
+            ChatRecord(role="user", text=text, timestamp_utc=self._now_iso())
+        )
         self._dump_logs_memory()
         self._append_novel_entry(text)
         self._request_assistant_reply()
@@ -381,7 +416,10 @@ class GameStateController(QObject):
         if self._world_folder_path is None:
             return
         current_skills = read_world_json(self._world_folder_path, "skill.json", [])
-        if not isinstance(current_skills, list) or len(current_skills) <= self.MAX_SKILLS:
+        if (
+            not isinstance(current_skills, list)
+            or len(current_skills) <= self.MAX_SKILLS
+        ):
             return
         self._trigger_forget_skill_prompt(current_skills)
 
@@ -404,7 +442,11 @@ class GameStateController(QObject):
         skills = read_world_json(self._world_folder_path, "skill.json", [])
         skill_to_remove = next((s for s in skills if s.get("名稱") == skill_name), None)
         if skill_to_remove and skill_to_remove.get("id"):
-            remove_change = {"action": "remove", "type": "技能", "id": skill_to_remove["id"]}
+            remove_change = {
+                "action": "remove",
+                "type": "技能",
+                "id": skill_to_remove["id"],
+            }
             apply_changes(self._world_folder_path, [remove_change])
         self.world_data_updated.emit()
         self._exit_skill_mode(notification=f"遺忘了《{skill_name}》")
@@ -414,7 +456,9 @@ class GameStateController(QObject):
             return
         if self._init_export_done:
             return
-        self.sections_page.assistant_message_received.emit(random.choice(self._greetings_lines))
+        self.sections_page.assistant_message_received.emit(
+            random.choice(self._greetings_lines)
+        )
 
     def _request_assistant_reply(self) -> None:
         self.sections_page.set_waiting(True)
@@ -422,11 +466,15 @@ class GameStateController(QObject):
 
         if self._api_client is None:
             log.warning("API client unavailable: missing API key")
-            self.api_error_occurred.emit("API key is not set. Add it in Settings to continue.")
+            self.api_error_occurred.emit(
+                "API key is not set. Add it in Settings to continue."
+            )
             return
 
         messages: list[dict[str, str]] = []
-        is_world_init_turn = not self._init_export_done and not self._is_world_initialized()
+        is_world_init_turn = (
+            not self._init_export_done and not self._is_world_initialized()
+        )
 
         if is_world_init_turn and self._init_prompt:
             messages.append({"role": "system", "content": self._init_prompt})
@@ -439,11 +487,16 @@ class GameStateController(QObject):
             records_for_api = self._records_without_world_builder_turn(self.records)
 
         if self._world_folder_path is not None:
-            context_payload = build_runtime_context(self._world_folder_path, records_for_api)
-            messages.append({
-                "role": "system",
-                "content": "runtime_context.json\n" + json.dumps(context_payload, ensure_ascii=False),
-            })
+            context_payload = build_runtime_context(
+                self._world_folder_path, records_for_api
+            )
+            messages.append(
+                {
+                    "role": "system",
+                    "content": "runtime_context.json\n"
+                    + json.dumps(context_payload, ensure_ascii=False),
+                }
+            )
 
         # Inject only the latest user message so the model knows what to respond to.
         if records_for_api:
@@ -463,7 +516,9 @@ class GameStateController(QObject):
         ).start()
 
     @staticmethod
-    def _records_without_world_builder_turn(records: list[ChatRecord]) -> list[ChatRecord]:
+    def _records_without_world_builder_turn(
+        records: list[ChatRecord],
+    ) -> list[ChatRecord]:
         first_user_seen = False
         first_assistant_seen = False
         filtered: list[ChatRecord] = []
@@ -472,20 +527,34 @@ class GameStateController(QObject):
             if not first_user_seen and record.role == "user":
                 first_user_seen = True
                 continue
-            if first_user_seen and (not first_assistant_seen) and record.role == "assistant":
+            if (
+                first_user_seen
+                and (not first_assistant_seen)
+                and record.role == "assistant"
+            ):
                 first_assistant_seen = True
                 continue
             filtered.append(record)
 
         return filtered
 
-    def _fetch_assistant_reply(self, messages: list[dict[str, str]], use_reasoning: bool = False) -> None:
+    def _fetch_assistant_reply(
+        self, messages: list[dict[str, str]], use_reasoning: bool = False
+    ) -> None:
         if self._api_client is None:
-            self.api_error_occurred.emit("API key is not set. Add it in Settings to continue.")
+            self.api_error_occurred.emit(
+                "API key is not set. Add it in Settings to continue."
+            )
             return
         try:
-            log.info("Requesting assistant reply with {} messages (reasoning={})", len(messages), use_reasoning)
-            assistant_text = self._api_client.send_messages(messages, reasoning=use_reasoning)
+            log.info(
+                "Requesting assistant reply with {} messages (reasoning={})",
+                len(messages),
+                use_reasoning,
+            )
+            assistant_text = self._api_client.send_messages(
+                messages, reasoning=use_reasoning
+            )
         except APIError as exc:
             log.exception("Assistant request failed")
             self.api_error_occurred.emit(str(exc))
@@ -509,14 +578,18 @@ class GameStateController(QObject):
                 if self.library_page is not None:
                     self.library_page.refresh_from_latest_world(self._base_path)
             else:
-                log.warning("World init export failed; keeping init state so user can retry")
+                log.warning(
+                    "World init export failed; keeping init state so user can retry"
+                )
 
         old_player_data, old_item_data, _ = self._read_player_and_items()
 
         self._apply_world_changes(assistant_text)
 
         self.records.append(
-            ChatRecord(role="assistant", text=assistant_text, timestamp_utc=self._now_iso())
+            ChatRecord(
+                role="assistant", text=assistant_text, timestamp_utc=self._now_iso()
+            )
         )
         self._dump_logs_memory()
 
@@ -524,14 +597,18 @@ class GameStateController(QObject):
         self._append_summary_entry(assistant_text)
 
         player_data, item_data, map_data = self._read_player_and_items()
-        narrative, status_line, options = assistant_chat_payload(assistant_text, player_data, item_data, map_data)
+        narrative, status_line, options = assistant_chat_payload(
+            assistant_text, player_data, item_data, map_data
+        )
 
         payload = extract_json(assistant_text)
         raw_changes = payload.get("changes") if isinstance(payload, dict) else []
         changes_lines = format_changes_lines(
             raw_changes or [],
-            old_player_data, player_data,
-            old_item_data, item_data,
+            old_player_data,
+            player_data,
+            old_item_data,
+            item_data,
             map_data,
             quest_data=self._read_quest_data(),
         )
@@ -595,7 +672,9 @@ class GameStateController(QObject):
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = [asdict(r) for r in self.records]
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         self.story_file_path = path
 
     def load_records(self, file_path: str | Path) -> None:

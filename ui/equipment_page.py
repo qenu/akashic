@@ -5,18 +5,11 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
-from qfluentwidgets import (
-    BodyLabel,
-    CaptionLabel,
-    FluentIcon as FIF,
-    InfoBar,
-    InfoBarPosition,
-    MessageBox,
-    SimpleCardWidget,
-    SubtitleLabel,
-    ToggleButton,
-    ToolButton,
-)
+from qfluentwidgets import BodyLabel, CaptionLabel
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (InfoBar, InfoBarPosition, MessageBox,
+                            SimpleCardWidget, SubtitleLabel, ToggleButton,
+                            ToolButton)
 
 from ui.world_data_page import WorldDataPage
 
@@ -63,7 +56,9 @@ class EquipmentPage(WorldDataPage):
         toggle = ToggleButton("裝備中" if is_equipped else "裝備")
         toggle.setChecked(is_equipped)
         toggle.setFixedWidth(80)
-        toggle.toggled.connect(lambda checked, e=entry, t=toggle: self._on_toggle(e, t, checked))
+        toggle.toggled.connect(
+            lambda checked, e=entry, t=toggle: self._on_toggle(e, t, checked)
+        )
 
         row.addWidget(toggle, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -94,7 +89,9 @@ class EquipmentPage(WorldDataPage):
             for other_eq, other_toggle in self._toggles:
                 if other_eq is entry:
                     continue
-                if other_eq.get("分類", "") == category and other_eq.get("使用中", False):
+                if other_eq.get("分類", "") == category and other_eq.get(
+                    "使用中", False
+                ):
                     other_eq["使用中"] = False
                     other_toggle.blockSignals(True)
                     other_toggle.setChecked(False)

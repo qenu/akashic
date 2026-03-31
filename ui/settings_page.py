@@ -1,28 +1,14 @@
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtWidgets import QLineEdit, QVBoxLayout, QWidget
-from qfluentwidgets import (
-    ConfigItem,
-    ExpandGroupSettingCard,
-    FluentIcon as FIF,
-    InfoBar,
-    InfoBarPosition,
-    LineEdit,
-    MessageBox,
-    OptionsConfigItem,
-    OptionsSettingCard,
-    OptionsValidator,
-    PushButton,
-    PushSettingCard,
-    RangeConfigItem,
-    RangeSettingCard,
-    RangeValidator,
-    SettingCard,
-    SettingCardGroup,
-    SingleDirectionScrollArea,
-    SpinBox,
-    Theme,
-    setTheme,
-)
+from qfluentwidgets import ConfigItem, ExpandGroupSettingCard
+from qfluentwidgets import FluentIcon as FIF
+from qfluentwidgets import (InfoBar, InfoBarPosition, LineEdit, MessageBox,
+                            OptionsConfigItem, OptionsSettingCard,
+                            OptionsValidator, PushButton, PushSettingCard,
+                            RangeConfigItem, RangeSettingCard, RangeValidator,
+                            SettingCard, SettingCardGroup,
+                            SingleDirectionScrollArea, SpinBox, Theme,
+                            setTheme)
 
 from app_config import AppConfig
 
@@ -69,13 +55,18 @@ class SettingsPage(QWidget):
             saved_theme_mode = "Light"
 
         self.theme_mode_item = OptionsConfigItem(
-            "App", "ThemeMode", saved_theme_mode,
+            "App",
+            "ThemeMode",
+            saved_theme_mode,
             OptionsValidator(["Light", "Dark", "Auto"]),
         )
 
         saved_opacity = int(cfg.get("ui", "window_opacity", 100))
         self.window_opacity_item = RangeConfigItem(
-            "App", "WindowOpacity", saved_opacity, RangeValidator(20, 100),
+            "App",
+            "WindowOpacity",
+            saved_opacity,
+            RangeValidator(20, 100),
         )
 
         self.api_key_item = ConfigItem("App", "ApiKey", "")
@@ -97,48 +88,74 @@ class SettingsPage(QWidget):
         group = SettingCardGroup("Settings", _container)
 
         self.theme_mode_card = OptionsSettingCard(
-            self.theme_mode_item, FIF.PALETTE, "Theme",
+            self.theme_mode_item,
+            FIF.PALETTE,
+            "Theme",
             "Choose Light, Dark, or Auto mode",
-            ["Light", "Dark", "Auto"], group,
+            ["Light", "Dark", "Auto"],
+            group,
         )
         self.opacity_card = RangeSettingCard(
-            self.window_opacity_item, FIF.CONSTRACT, "Window Opacity",
-            "Adjust overall window transparency", group,
+            self.window_opacity_item,
+            FIF.CONSTRACT,
+            "Window Opacity",
+            "Adjust overall window transparency",
+            group,
         )
         self.ai_group_card = ExpandGroupSettingCard(
-            FIF.ROBOT, "AI Settings", "API key, endpoint and model configuration", group,
+            FIF.ROBOT,
+            "AI Settings",
+            "API key, endpoint and model configuration",
+            group,
         )
         self.api_key_card = TextSettingCard(
-            FIF.CERTIFICATE, "AI API Key", "Used for assistant API requests",
-            placeholder="Enter API key", password=True,
+            FIF.CERTIFICATE,
+            "AI API Key",
+            "Used for assistant API requests",
+            placeholder="Enter API key",
+            password=True,
         )
         self.api_base_url_card = TextSettingCard(
-            FIF.LINK, "AI API Base URL", "Base endpoint for chat completion API",
+            FIF.LINK,
+            "AI API Base URL",
+            "Base endpoint for chat completion API",
             placeholder="Enter base host or URL (e.g. api.x.ai)",
         )
         self.api_model_card = TextSettingCard(
-            FIF.ROBOT, "AI API Model", "Model used for assistant API requests",
+            FIF.ROBOT,
+            "AI API Model",
+            "Model used for assistant API requests",
             placeholder="Enter model name (e.g. grok-3-latest)",
         )
         self.api_reasoning_model_card = TextSettingCard(
-            FIF.SEARCH, "World Creation Model", "Model used for the world builder (init) turn",
+            FIF.SEARCH,
+            "World Creation Model",
+            "Model used for the world builder (init) turn",
             placeholder="Enter model name (e.g. grok-3-mini)",
         )
 
         saved_font_size = int(cfg.get("ui", "font_size", 14))
         self.font_size_card = SettingCard(
-            FIF.FONT, "Font Size", "Adjust chat font size", group,
+            FIF.FONT,
+            "Font Size",
+            "Adjust chat font size",
+            group,
         )
         self._font_spinbox = SpinBox(self.font_size_card)
         self._font_spinbox.setRange(10, 32)
         self._font_spinbox.setValue(saved_font_size)
         self._font_spinbox.setFixedWidth(160)
-        self.font_size_card.hBoxLayout.addWidget(self._font_spinbox, 0, Qt.AlignmentFlag.AlignRight)
+        self.font_size_card.hBoxLayout.addWidget(
+            self._font_spinbox, 0, Qt.AlignmentFlag.AlignRight
+        )
         self.font_size_card.hBoxLayout.addSpacing(16)
 
         self.reset_story_card = PushSettingCard(
-            "Reset", FIF.DELETE, "Reset Story",
-            "Clear chat history and story progress", group,
+            "Reset",
+            FIF.DELETE,
+            "Reset Story",
+            "Clear chat history and story progress",
+            group,
         )
 
         # Populate editors from config
@@ -146,14 +163,21 @@ class SettingsPage(QWidget):
         self.api_key_item.value = saved_api_key
         self.api_key_card.editor.setText(saved_api_key)
 
-        saved_api_model = str(cfg.get("ai", "model", "grok-3-latest")).strip() or "grok-3-latest"
+        saved_api_model = (
+            str(cfg.get("ai", "model", "grok-3-latest")).strip() or "grok-3-latest"
+        )
         self.api_model_item.value = saved_api_model
         self.api_model_card.editor.setText(saved_api_model)
 
-        saved_reasoning_model = str(cfg.get("ai", "reasoning_model", "grok-3-mini")).strip() or "grok-3-mini"
+        saved_reasoning_model = (
+            str(cfg.get("ai", "reasoning_model", "grok-3-mini")).strip()
+            or "grok-3-mini"
+        )
         self.api_reasoning_model_card.editor.setText(saved_reasoning_model)
 
-        saved_base_url = str(cfg.get("ai", "base_url", "api.x.ai")).strip() or "api.x.ai"
+        saved_base_url = (
+            str(cfg.get("ai", "base_url", "api.x.ai")).strip() or "api.x.ai"
+        )
         self.api_base_url_card.editor.setText(saved_base_url)
 
         self.ai_group_card.addGroupWidget(self.api_key_card)
@@ -161,13 +185,15 @@ class SettingsPage(QWidget):
         self.ai_group_card.addGroupWidget(self.api_model_card)
         self.ai_group_card.addGroupWidget(self.api_reasoning_model_card)
 
-        group.addSettingCards([
-            self.theme_mode_card,
-            self.opacity_card,
-            self.font_size_card,
-            self.ai_group_card,
-            self.reset_story_card,
-        ])
+        group.addSettingCards(
+            [
+                self.theme_mode_card,
+                self.opacity_card,
+                self.font_size_card,
+                self.ai_group_card,
+                self.reset_story_card,
+            ]
+        )
 
         theme_map = {
             "Light": Theme.LIGHT,
@@ -190,8 +216,11 @@ class SettingsPage(QWidget):
             self.api_key_item.value = value
             self._qsettings.setValue("ai/api_key", value)
             InfoBar.success(
-                title="Saved", content="API key saved", duration=1500,
-                position=InfoBarPosition.TOP, parent=self.window(),
+                title="Saved",
+                content="API key saved",
+                duration=1500,
+                position=InfoBarPosition.TOP,
+                parent=self.window(),
             )
 
         def save_api_model() -> None:
@@ -200,8 +229,11 @@ class SettingsPage(QWidget):
             self.api_model_card.editor.setText(value)
             AppConfig.instance().set("ai", "model", value)
             InfoBar.success(
-                title="Saved", content="API model saved", duration=1500,
-                position=InfoBarPosition.TOP, parent=self.window(),
+                title="Saved",
+                content="API model saved",
+                duration=1500,
+                position=InfoBarPosition.TOP,
+                parent=self.window(),
             )
 
         def save_api_base_url() -> None:
@@ -209,8 +241,11 @@ class SettingsPage(QWidget):
             self.api_base_url_card.editor.setText(value)
             AppConfig.instance().set("ai", "base_url", value)
             InfoBar.success(
-                title="Saved", content="API base URL saved", duration=1500,
-                position=InfoBarPosition.TOP, parent=self.window(),
+                title="Saved",
+                content="API base URL saved",
+                duration=1500,
+                position=InfoBarPosition.TOP,
+                parent=self.window(),
             )
 
         def save_reasoning_model() -> None:
@@ -218,8 +253,11 @@ class SettingsPage(QWidget):
             self.api_reasoning_model_card.editor.setText(value)
             AppConfig.instance().set("ai", "reasoning_model", value)
             InfoBar.success(
-                title="Saved", content="World creation model saved", duration=1500,
-                position=InfoBarPosition.TOP, parent=self.window(),
+                title="Saved",
+                content="World creation model saved",
+                duration=1500,
+                position=InfoBarPosition.TOP,
+                parent=self.window(),
             )
 
         def request_reset_story() -> None:
@@ -234,8 +272,11 @@ class SettingsPage(QWidget):
                 return
             self.reset_story_requested.emit()
             InfoBar.success(
-                title="Story Reset", content="Story history cleared", duration=1500,
-                position=InfoBarPosition.TOP, parent=self.window(),
+                title="Story Reset",
+                content="Story history cleared",
+                duration=1500,
+                position=InfoBarPosition.TOP,
+                parent=self.window(),
             )
 
         def apply_font_size(value: int) -> None:
