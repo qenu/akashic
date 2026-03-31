@@ -21,6 +21,7 @@ class SectionsPage(QWidget):
         self.setObjectName("sectionsPage")
         self._font_size = int(AppConfig.instance().get("ui", "font_size", 14))
         self._max_chars = 150
+        self._max_chat_bubbles = 40
         self._is_waiting = False
         self._options_available = True
         self._over_word_limit = False
@@ -340,6 +341,7 @@ class SectionsPage(QWidget):
         user_layout.setSpacing(0)
         user_layout.addWidget(self._create_message_label(text, is_user=True))
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, user_container)
+        self._trim_old_bubbles()
         self._request_scroll_to_bottom()
 
     def _add_assistant_message(
@@ -365,6 +367,7 @@ class SectionsPage(QWidget):
                 self._create_message_label(options_text, is_user=False)
             )
         self.chat_layout.insertWidget(self.chat_layout.count() - 1, bubble)
+        self._trim_old_bubbles()
         self._request_scroll_to_bottom()
 
     def start_stream(
@@ -418,6 +421,7 @@ class SectionsPage(QWidget):
             self._stream_timer.stop()
             self._stream_bubble = None
             self._stream_segments = []
+            self._trim_old_bubbles()
             if self._stream_on_done is not None:
                 self._stream_on_done()
                 self._stream_on_done = None
@@ -619,6 +623,20 @@ class SectionsPage(QWidget):
             position=InfoBarPosition.TOP,
             duration=6000,
         )
+
+    def _trim_old_bubbles(self) -> None:
+        """Remove oldest chat bubbles when over the limit to free memory.
+
+        Layout structure: [bubble_0, bubble_1, ..., bubble_n, stretch]
+        The stretch spacer is always the last item; content items precede it.
+        """
+        content_count = self.chat_layout.count() - 1  # exclude trailing stretch
+        while content_count > self._max_chat_bubbles:
+            item = self.chat_layout.takeAt(0)
+            widget = item.widget() if item else None
+            if widget is not None:
+                widget.deleteLater()
+            content_count -= 1
 
     def clear_story_ui(self) -> None:
         self._stream_timer.stop()

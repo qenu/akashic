@@ -192,6 +192,21 @@ def _apply_list(
                 file_name,
             )
             _do_add(data, type_name, entry_id, entry)
+            # Auto-remove if newly added item already has quantity 0.
+            if type_name in ("道具", "item"):
+                added = data[-1] if data else None
+                if (
+                    isinstance(added, dict)
+                    and str(added.get("id")) == entry_id
+                    and int(added.get("數量", -1)) == 0
+                ):
+                    data.pop()
+                    removed_ids.add(entry_id)
+                    log.info(
+                        "Auto-removed {} id='{}' (added with 數量 0)",
+                        type_name,
+                        entry_id,
+                    )
         else:
             _do_update(data, existing_idx, type_name, entry)
             # Auto-remove items whose quantity has dropped to zero.
