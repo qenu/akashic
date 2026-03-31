@@ -375,6 +375,14 @@ def _format_player_change(
         if old_identity != new_identity_str:
             lines.append(f"身分 {old_identity} -> {new_identity_str}")
 
+    new_currency = changes_data.get("貨幣")
+    if new_currency is not None:
+        old_currency = old_p.get("貨幣")
+        if old_currency != new_currency:
+            currency_name = str((old_p or new_p).get("貨幣名稱", "")).strip()
+            label = currency_name if currency_name else "貨幣"
+            lines.append(f"{label} {old_currency} -> {new_currency}")
+
     status_changes = changes_data.get("狀態")
     if isinstance(status_changes, dict):
         old_status = (
@@ -425,6 +433,12 @@ def format_player_status_line(
     fullness = status.get("飽腹感") if status else player_data.get("飽腹感")
     if fullness is not None:
         parts.append(f"飽腹感: {fullness}")
+
+    currency = player_data.get("貨幣")
+    currency_name = str(player_data.get("貨幣名稱", "")).strip()
+    if currency is not None:
+        label = currency_name if currency_name else "貨幣"
+        parts.append(f"{label}: {currency}")
 
     identity = str(player_data.get("身分", "")).strip()
     if identity:
