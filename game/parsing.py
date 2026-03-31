@@ -319,9 +319,10 @@ def _format_player_change(
     if new_loc is not None:
         old_loc = str(old_p.get("地點", "")).strip()
         new_loc_str = str(new_loc).strip()
-        old_name = _resolve_map_name(old_loc, map_data) if old_loc else "?"
-        new_name = _resolve_map_name(new_loc_str, map_data)
-        lines.append(f"移動 {old_name} -> {new_name}")
+        if old_loc != new_loc_str:
+            old_name = _resolve_map_name(old_loc, map_data) if old_loc else "?"
+            new_name = _resolve_map_name(new_loc_str, map_data)
+            lines.append(f"移動 {old_name} -> {new_name}")
 
     new_identity = changes_data.get("身分")
     if new_identity is not None:
@@ -338,6 +339,8 @@ def _format_player_change(
         for field, _ in status_changes.items():
             old_val = old_status.get(field, "?")
             new_val = new_status.get(field, "?")
+            if str(old_val) == str(new_val):
+                continue
             label = consumable_name if field == "消耗" and consumable_name else field
             lines.append(f"{label} {old_val} -> {new_val}")
 

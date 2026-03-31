@@ -9,8 +9,6 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     FluentIcon as FIF,
-    InfoBar,
-    InfoBarPosition,
     MessageBox,
     PushButton,
     SimpleCardWidget,
@@ -71,24 +69,24 @@ class ItemPage(WorldDataPage):
 
         return card
 
+    def set_frozen(self, frozen: bool) -> None:
+        """Disable or re-enable all use and delete buttons on every card."""
+        for i in range(self.content_layout.count() - 1):
+            item = self.content_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if widget is None:
+                continue
+            for btn in widget.findChildren(PushButton):
+                btn.setEnabled(not frozen)
+            for btn in widget.findChildren(ToolButton):
+                btn.setEnabled(not frozen)
+
     def _on_use(self, entry: dict, qty_label: CaptionLabel) -> None:
         qty = int(entry.get("數量", 0))
         if qty <= 0:
             return
-        qty -= 1
-        entry["數量"] = qty
-        qty_label.setText(f"數量：{qty}")
         name = entry.get("名稱", "")
         self.item_used.emit(name)
-        InfoBar.success(
-            title="使用",
-            content=f"使用了 {name}（剩餘數量: {qty}）",
-            parent=self,
-            position=InfoBarPosition.TOP_RIGHT,
-            duration=2000,
-        )
-        if qty == 0:
-            self._remove_entry(entry)
 
     def _on_delete(self, entry: dict) -> None:
         name = entry.get("名稱", "")

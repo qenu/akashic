@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Signal
-from qfluentwidgets import FluentIcon as FIF, FluentWindow, NavigationItemPosition
+from qfluentwidgets import DotInfoBadge, FluentIcon as FIF, FluentWindow, InfoBadgePosition, NavigationItemPosition
 
 from ui.chat_page import SectionsPage
 from ui.library_page import LibraryPage
@@ -53,3 +53,24 @@ class MainWindow(FluentWindow):
 
         settings_page.reset_story_requested.connect(self.reset_story_requested.emit)
         settings_page.font_size_changed.connect(sections_page.set_font_size)
+
+        self._chat_badge: DotInfoBadge | None = None
+
+    def show_chat_badge(self) -> None:
+        """Show an attention dot on the Chat nav item."""
+        if self._chat_badge is not None:
+            return
+        nav_item = self.navigationInterface.widget("sectionsPage")
+        if nav_item is None:
+            return
+        self._chat_badge = DotInfoBadge.attension(
+            parent=nav_item,
+            target=nav_item,
+            position=InfoBadgePosition.NAVIGATION_ITEM,
+        )
+
+    def clear_chat_badge(self) -> None:
+        """Remove the attention dot from the Chat nav item."""
+        if self._chat_badge is not None:
+            self._chat_badge.deleteLater()
+            self._chat_badge = None
