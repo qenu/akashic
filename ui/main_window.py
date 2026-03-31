@@ -17,7 +17,8 @@ class MainWindow(FluentWindow):
     def __init__(self, base_path: Path | None = None) -> None:
         super().__init__()
         self._base_path = base_path or Path.cwd()
-        self.setWindowTitle("Interface")
+        self.setWindowTitle("Akashic")
+        self.setWindowIcon(FIF.CHAT.icon())
         self.resize(900, 600)
         self._build_ui()
 

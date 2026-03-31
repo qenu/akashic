@@ -47,7 +47,7 @@ class SectionsPage(QWidget):
         self._stream_timer = QTimer(self)
         self._stream_timer.setInterval(60)
         self._stream_timer.timeout.connect(self._stream_tick)
-        self._option_placeholders = ["Option 1", "Option 2", "Option 3", "Option 4"]
+        self._option_placeholders = ["選項 1", "選項 2", "選項 3", "選項 4"]
         self._skill_mode = "idle"  # "idle" | "use" | "forget"
         self._skill_prompt_widget: QWidget | None = None
         self._auto_scroll_enabled = True

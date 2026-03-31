@@ -1,3 +1,4 @@
+import ctypes
 from pathlib import Path
 
 from app_config import AppConfig
@@ -6,6 +7,7 @@ from game.controller import GameStateController
 
 
 def main() -> int:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("akashic")
     base_path = Path(__file__).resolve().parent
     AppConfig.init(base_path)
     AppLogger.configure(base_dir=base_path)
