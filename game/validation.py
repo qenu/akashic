@@ -35,9 +35,9 @@ class _Rules:
 
     # Fields allowed when updating each type via a change entry.
     UPDATE_ALLOWED: dict[str, set[str]] = {
-        "玩家": {"地點", "狀態", "身分"},
+        "玩家": {"地點", "狀態", "身分", "貨幣"},
         "任務": {"敘述", "進度"},
-        "NPC": {"身分", "性格", "關係", "目標"},
+        "NPC": {"名稱", "身分", "性格", "關係", "目標"},
         "技能": {"效果"},
         "裝備": {"用途"},
         "道具": {"數量"},

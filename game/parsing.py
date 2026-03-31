@@ -391,13 +391,18 @@ def _format_player_change(
         new_status = (
             new_p.get("狀態", {}) if isinstance(new_p.get("狀態"), dict) else {}
         )
-        consumable_name = str((old_p or new_p).get("消耗名稱", "")).strip()
+        p = old_p or new_p
+        consumable_name = str(p.get("能量名稱") or p.get("消耗名稱", "")).strip()
         for field, _ in status_changes.items():
             old_val = old_status.get(field, "?")
             new_val = new_status.get(field, "?")
             if str(old_val) == str(new_val):
                 continue
-            label = consumable_name if field == "消耗" and consumable_name else field
+            label = (
+                consumable_name
+                if field in ("能量", "消耗") and consumable_name
+                else field
+            )
             lines.append(f"{label} {old_val} -> {new_val}")
 
     return lines
@@ -408,9 +413,9 @@ def format_player_status_line(
 ) -> str:
     """Build a one-line player status string from player.json data.
 
-    Order: 生命 | 消耗名稱: 消耗 | 飽腹感 | 身分 | 地點
-    消耗名稱 is the world-specific label (e.g. 靈氣, 魔力) stored at the top level;
-    its value comes from 狀態.消耗.
+    Order: 生命 | 能量名稱: 能量 | 飽腹感 | 貨幣 | 身分 | 地點
+    能量名稱 is the world-specific label (e.g. 魔力, 真氣) stored at the top level;
+    its value comes from 狀態.能量. Falls back to 消耗/消耗名稱 for old saves.
     地點 is resolved to the map entry's 名稱 when map_data is provided.
     """
     if not isinstance(player_data, dict):
@@ -425,8 +430,12 @@ def format_player_status_line(
     if hp is not None:
         parts.append(f"生命: {hp}")
 
-    consumable_value = status.get("消耗")
-    consumable_name = str(player_data.get("消耗名稱", "")).strip()
+    consumable_value = (
+        status.get("能量") if status.get("能量") is not None else status.get("消耗")
+    )
+    consumable_name = str(
+        player_data.get("能量名稱") or player_data.get("消耗名稱", "")
+    ).strip()
     if consumable_value is not None and consumable_name:
         parts.append(f"{consumable_name}: {consumable_value}")
 

@@ -43,7 +43,8 @@ class QuestPage(WorldDataPage):
 
         row.addLayout(info_col, 1)
 
-        abandon_btn = PushButton("放棄任務")
+        is_completed = entry.get("進度", "") == "已完成"
+        abandon_btn = PushButton("封存任務" if is_completed else "放棄任務")
         abandon_btn.setFixedWidth(90)
         abandon_btn.clicked.connect(lambda _, e=entry: self._on_abandon(e))
 
@@ -53,7 +54,10 @@ class QuestPage(WorldDataPage):
 
     def _on_abandon(self, entry: dict) -> None:
         name = entry.get("名稱", "")
-        dlg = MessageBox("放棄任務", f"確定要放棄 {name} 嗎?", self)
+        is_completed = entry.get("進度", "") == "已完成"
+        title = "封存任務" if is_completed else "放棄任務"
+        body = f"確定要封存 {name} 嗎?" if is_completed else f"確定要放棄 {name} 嗎?"
+        dlg = MessageBox(title, body, self)
         dlg.yesButton.setText("確認")
         dlg.cancelButton.setText("取消")
         if dlg.exec():
