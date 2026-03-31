@@ -41,6 +41,7 @@ class MainWindow(FluentWindow):
             "Library",
             position=NavigationItemPosition.SCROLL,
         )
+        self.navigationInterface.widget(library_page.objectName()).setVisible(False)
         self.addSubInterface(
             quest_page,
             FIF.BOOK_SHELF,
