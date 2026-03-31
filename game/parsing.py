@@ -306,6 +306,8 @@ def _format_single_change(
 
         if action == "add":
             qty = data.get("數量")
+            if qty is not None and int(qty) <= 0:
+                return []
             base = f"獲得道具 - {name}"
             if usage:
                 base += f": {usage}"
@@ -329,7 +331,9 @@ def _format_single_change(
                 except (ValueError, TypeError):
                     pass
             qty = data.get("數量")
-            return [f"獲得道具 - {name} x{qty}"] if qty is not None else []
+            if qty is None or int(qty) <= 0:
+                return []
+            return [f"獲得道具 - {name} x{qty}"]
 
         if action == "remove":
             old_item = _find_item_in_list(old_items, entry_id)
