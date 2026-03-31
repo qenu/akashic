@@ -11,6 +11,8 @@
 !/main.py
 !/requirements.txt
 !/responses.py
+!/README.md
+!/LICENSE
 
 */__pycache__/*
 *.pyc
