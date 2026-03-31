@@ -57,7 +57,8 @@ class GameStateController(QObject):
         self._init_export_done = False
         self._compression_in_progress = False
         self._summary_lock = threading.Lock()
-        self._skill_mode = "idle"  # "idle" | "use"
+        self._skill_mode = "idle"  # "idle" | "use" | "forget"
+        self._pending_new_skill: dict | None = None
         self._last_story_options: list[str] = []
         self._config = AppConfig.instance()
         self._base_path = base_path
@@ -364,68 +365,49 @@ class GameStateController(QObject):
         if self._skill_mode == "use":
             self._exit_skill_mode(notification=f"使用了{skill_name}")
             self._on_user_message(f"我使用了技能：{skill_name}")
+        elif self._skill_mode == "forget":
+            self._forget_skill_and_apply(skill_name)
 
     def _exit_skill_mode(self, notification: str = "放棄使用技能") -> None:
         self._skill_mode = "idle"
         self.sections_page.set_skill_button_mode("idle")
         self.sections_page.dismiss_skill_prompt(notification)
+        self.sections_page.freeze_input(False)
         self.sections_page.set_option_candidates(self._last_story_options)
 
     def _check_and_prompt_forget_skill(self) -> None:
-        """Called after each turn's stream finishes. Shows a modal dialog if
-        the player's skill count exceeds MAX_SKILLS."""
+        """Called after each turn's stream finishes. Shows the in-chat forget
+        bubble if the player's skill count exceeds MAX_SKILLS."""
         if self._world_folder_path is None:
             return
         current_skills = read_world_json(self._world_folder_path, "skill.json", [])
         if not isinstance(current_skills, list) or len(current_skills) <= self.MAX_SKILLS:
             return
-        self._show_forget_skill_dialog(current_skills)
+        self._trigger_forget_skill_prompt(current_skills)
 
-    def _show_forget_skill_dialog(self, current_skills: list) -> None:
-        from PySide6.QtWidgets import QDialog, QVBoxLayout
-        from qfluentwidgets import BodyLabel, PushButton
-
-        dialog = QDialog(self.sections_page)
-        dialog.setWindowTitle("技能欄已滿")
-        dialog.setModal(True)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(8)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        label = BodyLabel(f"技能欄已滿（上限 {self.MAX_SKILLS} 個），請選擇要遺忘的技能：")
-        label.setWordWrap(True)
-        layout.addWidget(label)
-
-        selected: list[dict | None] = [None]
-
+    def _trigger_forget_skill_prompt(self, current_skills: list) -> None:
+        lines = [f"技能欄已滿（上限 {self.MAX_SKILLS} 個），請選擇要遺忘的技能："]
         for skill in current_skills:
             name = skill.get("名稱", "未知技能")
             effect = skill.get("效果", "")
-            btn_text = f"{name}：{effect}" if effect else name
-            btn = PushButton(btn_text)
+            lines.append(f"{name}：{effect}" if effect else name)
+        self.sections_page.show_skill_prompt("\n".join(lines))
+        self._skill_mode = "forget"
+        self.sections_page.set_skill_button_mode("forget")
+        self.sections_page.set_skill_candidates(current_skills)
+        self.sections_page.freeze_input(True)
 
-            def _make_handler(s: dict) -> None:
-                def handler() -> None:
-                    selected[0] = s
-                    dialog.accept()
-                return handler  # type: ignore[return-value]
-
-            btn.clicked.connect(_make_handler(skill))
-            layout.addWidget(btn)
-
-        dialog.exec()
-
-        skill_to_forget = selected[0]
-        if skill_to_forget is None or self._world_folder_path is None:
+    def _forget_skill_and_apply(self, skill_name: str) -> None:
+        if self._world_folder_path is None:
+            self._exit_skill_mode(notification="放棄遺忘技能")
             return
-        skill_id = skill_to_forget.get("id", "")
-        if not skill_id:
-            return
-        remove_change = {"action": "remove", "type": "技能", "id": skill_id}
-        apply_changes(self._world_folder_path, [remove_change])
-        skill_name = skill_to_forget.get("名稱", "技能")
-        self.sections_page.dismiss_skill_prompt(f"遺忘了《{skill_name}》")
+        skills = read_world_json(self._world_folder_path, "skill.json", [])
+        skill_to_remove = next((s for s in skills if s.get("名稱") == skill_name), None)
+        if skill_to_remove and skill_to_remove.get("id"):
+            remove_change = {"action": "remove", "type": "技能", "id": skill_to_remove["id"]}
+            apply_changes(self._world_folder_path, [remove_change])
         self.world_data_updated.emit()
+        self._exit_skill_mode(notification=f"遺忘了《{skill_name}》")
 
     def _ensure_world_prompt(self) -> None:
         if self.records:

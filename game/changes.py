@@ -164,6 +164,13 @@ def _apply_list(
             _do_add(data, type_name, entry_id, entry)
         else:
             _do_update(data, existing_idx, type_name, entry)
+            # Auto-remove items whose quantity has dropped to zero.
+            if type_name in ("道具", "item"):
+                updated = data[existing_idx]
+                if isinstance(updated, dict) and int(updated.get("數量", -1)) == 0:
+                    data.pop(existing_idx)
+                    removed_ids.add(entry_id)
+                    log.info("Auto-removed {} id='{}' (數量 reached 0)", type_name, entry_id)
 
     elif action == "remove":
         if existing_idx is not None:

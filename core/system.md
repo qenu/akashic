@@ -54,6 +54,8 @@
 - 如果在 narrative 使用了道具，必須寫在 changes
 - 所有操作必須使用既有 ID，或在新增時提供唯一 ID
 - options 必須是 4 個
+- 可以提供兩難的 options 
+- options 必須合情合理
 - 技能 道具 裝備 用途效果必須符合互動式小說設計，不應該出現回合、秒...等概念
 
 ## 操作格式（嚴格遵守）
@@ -157,7 +159,7 @@
   "changes": {
     "location": "tavern",
     "status": {
-      "energy": 80
+      "energy": 80/100
     }
   }
 }

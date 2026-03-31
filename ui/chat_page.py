@@ -569,6 +569,12 @@ class SectionsPage(QWidget):
         if not is_waiting:
             self.input_box.setFocus()
 
+    def freeze_input(self, frozen: bool) -> None:
+        """Disable or re-enable the text input and send button without
+        touching the thinking indicator or option buttons."""
+        self.input_box.setEnabled(not frozen)
+        self.send_button.setEnabled(not frozen)
+
     def _on_user_message(self, user_input: str) -> None:
         self._add_user_text_message(user_input)
 
