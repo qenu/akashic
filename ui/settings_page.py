@@ -7,8 +7,8 @@ from qfluentwidgets import (InfoBar, InfoBarPosition, LineEdit, MessageBox,
                             OptionsValidator, PushButton, PushSettingCard,
                             RangeConfigItem, RangeSettingCard, RangeValidator,
                             SettingCard, SettingCardGroup,
-                            SingleDirectionScrollArea, SpinBox, Theme,
-                            setTheme)
+                            SingleDirectionScrollArea, SpinBox,
+                            SwitchSettingCard, Theme, setTheme)
 
 from app_config import AppConfig
 
@@ -133,6 +133,15 @@ class SettingsPage(QWidget):
             "Model used for the world builder (init) turn",
             placeholder="Enter model name (e.g. grok-3-mini)",
         )
+        saved_log_raw_io = bool(cfg.get("ai", "log_raw_io", False))
+        self.log_raw_io_item = ConfigItem("App", "LogRawIO", saved_log_raw_io)
+        self.log_raw_io_card = SwitchSettingCard(
+            FIF.DOCUMENT,
+            "Log Raw API I/O",
+            "Log full request and response payloads to the log file",
+            self.log_raw_io_item,
+        )
+        self.log_raw_io_card.setChecked(saved_log_raw_io)
 
         saved_font_size = int(cfg.get("ui", "font_size", 14))
         self.font_size_card = SettingCard(
@@ -184,6 +193,7 @@ class SettingsPage(QWidget):
         self.ai_group_card.addGroupWidget(self.api_base_url_card)
         self.ai_group_card.addGroupWidget(self.api_model_card)
         self.ai_group_card.addGroupWidget(self.api_reasoning_model_card)
+        self.ai_group_card.addGroupWidget(self.log_raw_io_card)
 
         group.addSettingCards(
             [
@@ -260,6 +270,9 @@ class SettingsPage(QWidget):
                 parent=self.window(),
             )
 
+        def toggle_log_raw_io(checked: bool) -> None:
+            AppConfig.instance().set("ai", "log_raw_io", checked)
+
         def request_reset_story() -> None:
             dialog = MessageBox(
                 "Reset Story",
@@ -290,6 +303,7 @@ class SettingsPage(QWidget):
         self.api_base_url_card.save_button.clicked.connect(save_api_base_url)
         self.api_model_card.save_button.clicked.connect(save_api_model)
         self.api_reasoning_model_card.save_button.clicked.connect(save_reasoning_model)
+        self.log_raw_io_item.valueChanged.connect(toggle_log_raw_io)
         self.reset_story_card.clicked.connect(request_reset_story)
 
         apply_theme_mode(self.theme_mode_item.value)

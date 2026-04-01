@@ -28,7 +28,7 @@ from responses import APIConfig, APIError, ResponseClient
 
 log = AppLogger.get_logger("state")
 
-SUMMARY_COMPRESSION_THRESHOLD = 1200  # words
+SUMMARY_COMPRESSION_THRESHOLD = 2000  # characters
 
 
 class GameStateController(QObject):
@@ -120,6 +120,7 @@ class GameStateController(QObject):
         self.assistant_reply_ready.connect(self._on_async_assistant_reply)
         self.compression_state_changed.connect(self.sections_page.set_compressing)
         self.api_error_occurred.connect(self._on_api_error)
+        self.sections_page.retry_requested.connect(self._on_retry_requested)
         self._ensure_world_prompt()
 
     # ------------------------------------------------------------------
@@ -165,10 +166,7 @@ class GameStateController(QObject):
             append_novel(self._world_folder_path, narrative)
 
     def _append_summary_entry(self, assistant_text: str) -> None:
-        """Extract the summary field from an assistant reply and append it to summary.md.
-        Skipped during the opening options turn (system-generated, not player-driven).
-        Triggers background compression when the file exceeds the word-count threshold.
-        """
+        """Extract the summary field from an assistant reply and append it to summary.md."""
         if self._world_folder_path is None:
             return
         if self._awaiting_opening_options:
@@ -181,17 +179,6 @@ class GameStateController(QObject):
             return
         with self._summary_lock:
             append_summary(self._world_folder_path, summary)
-            word_count = count_summary_words(self._world_folder_path)
-        if (
-            word_count >= SUMMARY_COMPRESSION_THRESHOLD
-            and not self._compression_in_progress
-        ):
-            self._compression_in_progress = True
-            log.info(
-                "Summary exceeded {} words; scheduling compression",
-                SUMMARY_COMPRESSION_THRESHOLD,
-            )
-            threading.Thread(target=self._compress_summary, daemon=True).start()
 
     def _compress_summary(self) -> None:
         """Compress summary.md in place via a dedicated API call. Runs in a background thread."""
@@ -209,20 +196,20 @@ class GameStateController(QObject):
                 snapshot = read_summary(world_folder)
             if not snapshot.strip():
                 return
-            snapshot_words = len(snapshot.split())
+            snapshot_words = len(snapshot)
             messages = [
                 {"role": "system", "content": compression_prompt},
                 {"role": "user", "content": snapshot},
             ]
-            log.info("Compressing summary ({} words)…", snapshot_words)
-            compressed = client.send_messages(messages, reasoning=False)
+            log.info("Compressing summary ({} chars)…", snapshot_words)
+            compressed = client.send_messages(messages, use_schema=False)
             if not compressed.strip():
                 log.warning("Summary compression returned empty result; skipping")
                 return
-            if len(compressed.split()) >= snapshot_words:
+            if len(compressed) >= snapshot_words:
                 log.warning(
                     "Compression result not shorter ({} >= {}); skipping",
-                    len(compressed.split()),
+                    len(compressed),
                     snapshot_words,
                 )
                 return
@@ -233,9 +220,9 @@ class GameStateController(QObject):
                 final = compressed.strip() + ("\n\n" + tail if tail else "")
                 write_summary(world_folder, final)
             log.info(
-                "Summary compressed: {} -> {} words",
+                "Summary compressed: {} -> {} chars",
                 snapshot_words,
-                len(compressed.split()),
+                len(compressed),
             )
         except Exception as exc:
             log.warning("Summary compression failed: {}", exc)
@@ -275,11 +262,19 @@ class GameStateController(QObject):
         reasoning_model = str(
             self._config.get("ai", "reasoning_model", "grok-3-mini")
         ).strip()
+        temperature = float(self._config.get("ai", "temperature", 1.0))
+        max_tokens = int(self._config.get("ai", "max_tokens", 4096))
+        timeout_seconds = float(self._config.get("ai", "timeout_seconds", 120.0))
+        log_raw_io = bool(self._config.get("ai", "log_raw_io", False))
         config = APIConfig(
             base_url=base_url,
             api_key=api_key,
             model=model or "grok-3-latest",
             reasoning_model=reasoning_model or "grok-3-mini",
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout_seconds=timeout_seconds,
+            log_raw_io=log_raw_io,
         )
         return ResponseClient(config)
 
@@ -358,7 +353,13 @@ class GameStateController(QObject):
 
     def _on_api_error(self, message: str) -> None:
         self.sections_page.set_waiting(False)
-        self.sections_page.show_error(message)
+        if "not valid JSON" in message:
+            self.sections_page.show_parse_failure_actions()
+        else:
+            self.sections_page.show_error(message)
+
+    def _on_retry_requested(self) -> None:
+        self._request_assistant_reply()
 
     def _on_item_used(self, item_name: str) -> None:
         if not self._init_export_done:
@@ -471,22 +472,30 @@ class GameStateController(QObject):
             )
             return
 
-        messages: list[dict[str, str]] = []
         is_world_init_turn = (
             not self._init_export_done and not self._is_world_initialized()
         )
 
-        if is_world_init_turn and self._init_prompt:
-            messages.append({"role": "system", "content": self._init_prompt})
+        if is_world_init_turn:
             self._awaiting_init_export = True
         else:
             self._awaiting_init_export = False
 
+        threading.Thread(
+            target=self._fetch_assistant_reply,
+            args=(is_world_init_turn,),
+            daemon=True,
+        ).start()
+
+    def _build_messages(self, is_world_init_turn: bool) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
         records_for_api = self.records
         if self._init_export_done:
             records_for_api = self._records_without_world_builder_turn(self.records)
 
-        if self._world_folder_path is not None:
+        if is_world_init_turn and self._init_prompt:
+            messages.append({"role": "system", "content": self._init_prompt})
+        elif self._world_folder_path is not None:
             context_payload = build_runtime_context(
                 self._world_folder_path, records_for_api
             )
@@ -498,22 +507,15 @@ class GameStateController(QObject):
                 }
             )
 
-        # Inject only the latest user message so the model knows what to respond to.
         if records_for_api:
             latest = records_for_api[-1]
             if latest.role == "user":
                 messages.append({"role": "user", "content": latest.text})
 
-        # Place system.md at the very end so it's the last thing the
-        # model sees, making it much harder to ignore.
         if self._core_prompt and not is_world_init_turn:
             messages.append({"role": "system", "content": self._core_prompt})
 
-        threading.Thread(
-            target=self._fetch_assistant_reply,
-            args=(messages, is_world_init_turn),
-            daemon=True,
-        ).start()
+        return messages
 
     @staticmethod
     def _records_without_world_builder_turn(
@@ -539,7 +541,7 @@ class GameStateController(QObject):
         return filtered
 
     def _fetch_assistant_reply(
-        self, messages: list[dict[str, str]], use_reasoning: bool = False
+        self, is_world_init_turn: bool = False
     ) -> None:
         if self._api_client is None:
             self.api_error_occurred.emit(
@@ -547,13 +549,15 @@ class GameStateController(QObject):
             )
             return
         try:
+            if not is_world_init_turn:
+                self._maybe_compress_before_call()
+            messages = self._build_messages(is_world_init_turn)
             log.info(
-                "Requesting assistant reply with {} messages (reasoning={})",
+                "Requesting assistant reply with {} messages",
                 len(messages),
-                use_reasoning,
             )
             assistant_text = self._api_client.send_messages(
-                messages, reasoning=use_reasoning
+                messages, reasoning=is_world_init_turn
             )
         except APIError as exc:
             log.exception("Assistant request failed")
@@ -564,6 +568,18 @@ class GameStateController(QObject):
             self.api_error_occurred.emit(str(exc))
             return
         self.assistant_reply_ready.emit(assistant_text)
+
+    def _maybe_compress_before_call(self) -> None:
+        """Compress summary.md inline if it exceeds the threshold. Runs in the worker thread."""
+        if self._world_folder_path is None or self._compression_in_progress:
+            return
+        with self._summary_lock:
+            char_count = count_summary_words(self._world_folder_path)
+        if char_count < SUMMARY_COMPRESSION_THRESHOLD:
+            return
+        self._compression_in_progress = True
+        self.compression_state_changed.emit(True)
+        self._compress_summary()
 
     def _on_async_assistant_reply(self, assistant_text: str) -> None:
         world_builder_completed = False

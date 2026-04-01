@@ -26,22 +26,22 @@ class _Rules:
     # Fields required when adding each type via a change entry.
     ADD_REQUIRED: dict[str, list[str]] = {
         "任務": ["id", "敘述", "進度"],
-        "NPC": ["id", "名稱", "身分", "性格", "關係", "目標"],
+        "NPC": ["id", "名稱", "身分", "性格", "關係", "目標", "形容", "地點"],
         "技能": ["id", "名稱", "效果"],
         "裝備": ["id", "名稱", "分類", "用途"],
         "道具": ["id", "名稱", "用途", "數量"],
-        "地圖": ["id", "名稱", "形容", "路徑"],
+        "地圖": ["id", "名稱", "敘述", "路徑"],
     }
 
     # Fields allowed when updating each type via a change entry.
     UPDATE_ALLOWED: dict[str, set[str]] = {
         "玩家": {"地點", "狀態", "身分", "貨幣"},
         "任務": {"敘述", "進度"},
-        "NPC": {"名稱", "身分", "性格", "關係", "目標"},
+        "NPC": {"名稱", "身分", "性格", "關係", "目標", "形容", "地點"},
         "技能": {"效果"},
         "裝備": {"用途"},
         "道具": {"數量"},
-        "地圖": {"形容", "路徑"},
+        "地圖": {"敘述", "路徑"},
     }
 
     @staticmethod
@@ -147,7 +147,7 @@ class InitPayloadValidator:
                 else:
                     ids.add(raw_id)
             _Rules.check_non_empty_string(entry.get("名稱"), f"{label}.名稱", errors)
-            _Rules.check_non_empty_string(entry.get("形容"), f"{label}.形容", errors)
+            _Rules.check_non_empty_string(entry.get("敘述"), f"{label}.敘述", errors)
             if not isinstance(entry.get("路徑"), list):
                 errors.append(f"{label}.路徑 must be a list")
         return ids
@@ -387,5 +387,9 @@ class ChangeEntryValidator:
                 errors.append("changes.數量 must be a non-negative integer")
         if "狀態" in changes and isinstance(changes["狀態"], dict):
             for stat, val in changes["狀態"].items():
-                if not isinstance(val, (int, float)) or val < 0:
+                if isinstance(val, str) and "/" in val:
+                    parts = val.split("/", 1)
+                    if not all(p.strip().replace(".", "", 1).isdigit() for p in parts):
+                        errors.append(f"changes.狀態.{stat} has invalid format '{val}'; expected number or 'n/n'")
+                elif not isinstance(val, (int, float)) or val < 0:
                     errors.append(f"changes.狀態.{stat} must be a non-negative number")

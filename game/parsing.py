@@ -215,8 +215,26 @@ def format_changes_lines(
                 quest_data,
             )
         )
-    return lines
 
+    # Group multiple 獲得道具 / 失去道具 lines into single lines.
+    _GAIN = "獲得道具 - "
+    _LOSE = "失去道具 - "
+    gain_parts: list[str] = []
+    lose_parts: list[str] = []
+    other: list[str] = []
+    for line in lines:
+        if line.startswith(_GAIN):
+            gain_parts.append(line[len(_GAIN):])
+        elif line.startswith(_LOSE):
+            lose_parts.append(line[len(_LOSE):])
+        else:
+            other.append(line)
+    if gain_parts:
+        other.append(_GAIN + "、".join(gain_parts))
+    if lose_parts:
+        other.append(_LOSE + "、".join(lose_parts))
+    return other
+ 
 
 def _get_str(d: Any, key: str) -> str:
     if isinstance(d, dict):
@@ -277,9 +295,8 @@ def _format_single_change(
 
     elif type_name == "裝備":
         name = _get_str(data, "名稱") or entry_id
-        usage = _get_str(data, "用途")
         if action == "add":
-            return [f"獲得裝備 - {name}: {usage}"] if usage else [f"獲得裝備 - {name}"]
+            return [f"獲得裝備 - {name}"]
         if action == "remove":
             return [f"失去裝備 - {name}"]
 
@@ -302,15 +319,12 @@ def _format_single_change(
                 new_items, entry_id
             )
             name = _get_str(fallback, "名稱") or entry_id
-        usage = _get_str(data, "用途")
 
         if action == "add":
             qty = data.get("數量")
             if qty is not None and int(qty) <= 0:
                 return []
             base = f"獲得道具 - {name}"
-            if usage:
-                base += f": {usage}"
             if qty is not None:
                 base += f" x{qty}"
             return [base]

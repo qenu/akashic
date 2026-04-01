@@ -15,6 +15,25 @@ log = AppLogger.get_logger("world-io")
 DEFAULT_REQUIRED_FILES = {"player.json", "quest.json"}
 
 
+def _normalise_player_stats(player: dict) -> None:
+    """Ensure all 狀態 values are stored as 'current/max' strings.
+
+    A plain number is treated as both current and max (e.g. 100 → '100/100').
+    """
+    status = player.get("狀態")
+    if not isinstance(status, dict):
+        return
+    for stat, val in status.items():
+        if isinstance(val, str) and "/" in val:
+            continue  # already normalised
+        try:
+            num = float(val)
+        except (TypeError, ValueError):
+            continue
+        n = str(int(num)) if num == int(num) else str(num)
+        status[stat] = f"{n}/{n}"
+
+
 def resolve_latest_world_folder(
     base_path: Path,
     required_files: set[str] | None = None,
@@ -117,9 +136,9 @@ def write_summary(world_folder: Path, text: str) -> None:
 
 
 def count_summary_words(world_folder: Path) -> int:
-    """Return the word count of summary.md."""
+    """Return the character count of summary.md."""
     content = read_summary(world_folder)
-    return len(content.split()) if content else 0
+    return len(content) if content else 0
 
 
 def append_novel(world_folder: Path, text: str) -> None:
@@ -203,12 +222,15 @@ def parse_init_response(assistant_text: str) -> InitWorldData:
             if isinstance(eq, dict):
                 eq["使用中"] = True
 
+    player_data = payload.get("玩家", {})
+    if isinstance(player_data, dict):
+        _normalise_player_stats(player_data)
     return InitWorldData(
         world_title=title,
         background_story=str(worldview.get("背景", "")).strip(),
         quest_data=payload.get("任務", []),
         map_data=payload.get("地圖", {}),
-        player_data=payload.get("玩家", {}),
+        player_data=player_data,
         npc_data=payload.get("NPC", []),
         skill_data=skill_data if skill_data is not None else [],
         equipment_data=equipment_data if equipment_data is not None else [],

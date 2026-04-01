@@ -33,7 +33,11 @@ def build_runtime_context(
     related_npc = _filter_list_by_location(npc_data, location_id)
 
     mention_text = _build_reference_scan_text(records)
-    mentioned_items = _select_named_entries_by_reference(item_data, mention_text)
+    mentioned_items = [
+        {"id": it["id"], "名稱": it["名稱"], "數量": it["數量"]}
+        for it in _select_named_entries_by_reference(item_data, mention_text)
+        if isinstance(it, dict)
+    ]
     summary = read_summary(world_folder)
 
     return {

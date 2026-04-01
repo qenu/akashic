@@ -103,6 +103,55 @@ def _normalise_action(raw: Any) -> str:
     return ""
 
 
+def _parse_stat(val: Any) -> tuple[int | float, int | float | None]:
+    """Parse a stat value into (current, max).
+
+    Accepts:
+      - "80/100"  -> (80, 100)
+      - 80        -> (80, None)   # max unknown, keep existing
+    Returns (current, max_or_None).
+    """
+    if isinstance(val, str) and "/" in val:
+        parts = val.split("/", 1)
+        try:
+            return float(parts[0]), float(parts[1])
+        except ValueError:
+            pass
+    if isinstance(val, (int, float)):
+        return val, None
+    return val, None
+
+
+def _apply_stat_update(existing: dict, incoming: dict) -> None:
+    """Merge incoming status dict into existing, preserving max values."""
+    for stat, val in incoming.items():
+        new_cur, new_max = _parse_stat(val)
+        existing_val = existing.get(stat, "")
+        # Determine current max from existing stored value
+        if isinstance(existing_val, str) and "/" in existing_val:
+            parts = existing_val.split("/", 1)
+            try:
+                stored_max = float(parts[1])
+            except ValueError:
+                stored_max = None
+        else:
+            stored_max = None
+
+        max_to_use = new_max if new_max is not None else stored_max
+
+        if max_to_use is not None:
+            # Clamp current to [0, max]
+            clamped = max(0.0, min(float(new_cur), float(max_to_use)))
+            # Store as int strings when values are whole numbers
+            cur_str = str(int(clamped)) if clamped == int(clamped) else str(clamped)
+            max_str = str(int(max_to_use)) if max_to_use == int(max_to_use) else str(max_to_use)
+            existing[stat] = f"{cur_str}/{max_str}"
+        else:
+            # No max info at all — just store the raw number
+            existing[stat] = new_cur
+
+
+
 # ------------------------------------------------------------------
 # Dict-type file (player.json)
 # ------------------------------------------------------------------
@@ -144,8 +193,7 @@ def _apply_dict(
             and isinstance(value, dict)
             and isinstance(data.get("狀態"), dict)
         ):
-            data["狀態"].update(value)
-            _clamp_negatives(data["狀態"])
+            _apply_stat_update(data["狀態"], value)
         else:
             data[key] = value
 

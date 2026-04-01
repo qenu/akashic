@@ -15,6 +15,7 @@ class SectionsPage(QWidget):
     assistant_message_received = Signal(str)
     skill_button_clicked = Signal()
     skill_candidate_selected = Signal(str)
+    retry_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,6 +39,7 @@ class SectionsPage(QWidget):
         self._option_placeholders = ["選項 1", "選項 2", "選項 3", "選項 4"]
         self._skill_mode = "idle"  # "idle" | "use" | "forget"
         self._skill_prompt_widget: QWidget | None = None
+        self._retry_widget: QWidget | None = None
         self._auto_scroll_enabled = True
         self._programmatic_scroll = False
         self._bottom_threshold = 6
@@ -637,6 +639,40 @@ class SectionsPage(QWidget):
             if widget is not None:
                 widget.deleteLater()
             content_count -= 1
+
+    def show_parse_failure_actions(self) -> None:
+        """Append ↻ / ✕ buttons after the last user message to allow retrying."""
+        self._dismiss_retry_widget()
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(12, 0, 0, 4)
+        row.setSpacing(4)
+        refresh_btn = TransparentToolButton(FIF.SYNC, container)
+        refresh_btn.setToolTip("重試")
+        refresh_btn.clicked.connect(self._on_retry_clicked)
+        close_btn = TransparentToolButton(FIF.CLOSE, container)
+        close_btn.setToolTip("取消")
+        close_btn.clicked.connect(self._dismiss_retry_widget)
+        row.addWidget(refresh_btn)
+        row.addWidget(close_btn)
+        row.addStretch(1)
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, container)
+        self._retry_widget = container
+        self._request_scroll_to_bottom()
+
+    def _on_retry_clicked(self) -> None:
+        self._dismiss_retry_widget()
+        self.retry_requested.emit()
+
+    def _dismiss_retry_widget(self) -> None:
+        if self._retry_widget is not None:
+            idx = self.chat_layout.indexOf(self._retry_widget)
+            if idx >= 0:
+                item = self.chat_layout.takeAt(idx)
+                w = item.widget() if item else None
+                if w is not None:
+                    w.deleteLater()
+            self._retry_widget = None
 
     def clear_story_ui(self) -> None:
         self._stream_timer.stop()
