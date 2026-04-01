@@ -4,7 +4,7 @@
 ![PySide6](https://img.shields.io/badge/PySide6-6.11-green?logo=qt&logoColor=white)
 ![xAI](https://img.shields.io/badge/AI-Grok%20%28xAI%29-black?logo=x&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
-![Version](https://img.shields.io/badge/Version-0.1.2-orange)
+![Version](https://img.shields.io/badge/Version-0.2.0-orange)
 ![Code style: black](https://img.shields.io/badge/code%20style-black-000000)
 
 以 AI 驅動的互動文字冒險引擎，能即時生成動態奇幻世界。描述你想要的世界，AI 便會為你建構——包含 NPC、任務、道具，以及一個隨你的選擇不斷演化的故事。
